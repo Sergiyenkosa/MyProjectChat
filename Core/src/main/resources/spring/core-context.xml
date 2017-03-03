@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <bean id="server" class="server.Server">
+        <constructor-arg index="0" ref="serverSocket"/>
+        <constructor-arg index="1" ref="messageValidator"/>
+    </bean>
+
+    <bean id="serverSocket" class="java.net.ServerSocket">
+        <constructor-arg value="${server-port}"/>
+    </bean>
+
+    <bean id="messageValidator" class="server.validators.impl.TextMessageValidatorImpl">
+        <constructor-arg value="${max-text-length}"/>
+    </bean>
+
+    <bean class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="locations" value="classpath:properties/*"/>
+        <property name="ignoreResourceNotFound" value="true"/>
+    </bean>
+</beans>
