@@ -102,14 +102,14 @@ public class MessageFactory {
         return message;
     }
 
-    public static Message getFileMessageResponse(Message responseMessage) {
+    public static Message getFileMessageResponse(Message requestMessage) {
         Message message = new Message();
-        message.setType(FILE_MESSAGE_REQUEST);
-        message.setData(responseMessage.getData());
-        message.setSenderName(responseMessage.getSenderName());
-        message.setReceiverName(responseMessage.getReceiverName());
-        message.setSenderInputStreamId(responseMessage.getSenderInputStreamId());
-        message.setReceiverName(responseMessage.getReceiverName());
+        message.setType(FILE_MESSAGE_RESPONSE);
+        message.setData(requestMessage.getData());
+        message.setSenderName(requestMessage.getSenderName());
+        message.setReceiverName(requestMessage.getReceiverName());
+        message.setSenderInputStreamId(requestMessage.getSenderInputStreamId());
+        message.setReceiverOutputStreamId(requestMessage.getReceiverOutputStreamId());
         return message;
     }
 

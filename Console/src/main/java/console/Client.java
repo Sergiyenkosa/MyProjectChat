@@ -2,9 +2,10 @@ package console;
 
 import connection.Connection;
 import connection.impl.ConnectionImpl;
+import messagehandlers.TextMessageHelper;
+import messagehandlers.impl.TextMessageConsoleHelper;
 import messages.Message;
 import messages.MessageFactory;
-import server.*;
 
 import java.io.*;
 import java.lang.reflect.Field;
@@ -19,66 +20,34 @@ import static messages.Message.*;
 /**
  * Created by s.sergienko on 18.10.2016.
  */
-public class Client{
-    protected Connection connection;
+public abstract class Client{
+    private Connection connection;
     protected volatile boolean clientConnected = false;
-    private final Object fileRequestLock = new Object();
+    private Map<String, Map<Integer, FileInputStream>> inputStreamsMap = new ConcurrentHashMap<>();
+    private Map<String, Map<Integer, FileOutputStream>> outputStreamsMap = new ConcurrentHashMap<>();
+    public TextMessageHelper messageHelper = new TextMessageConsoleHelper();
+
     private final Object closeAndRemoveFromInputStreamsMapLock = new Object();
     private final Object closeAndRemoveFromOutputStreamMapLock = new Object();
 
-    //temporarily start
-
-    public Map<String, Map<Integer, FileInputStream>> getInputStreamsMap() {
-        return inputStreamsMap;
-    }
-
-    public void setInputStreamsMap(Map<String, Map<Integer, FileInputStream>> inputStreamsMap) {
-        this.inputStreamsMap = inputStreamsMap;
-    }
-
-    public Map<String, Map<Integer, FileOutputStream>> getOutputStreamsMap() {
-        return outputStreamsMap;
-    }
-
-    public void setOutputStreamsMap(Map<String, Map<Integer, FileOutputStream>> outputStreamsMap) {
-        this.outputStreamsMap = outputStreamsMap;
-    }
-
-    //temporarily end
-
-    protected Map<String, Map<Integer, FileInputStream>> inputStreamsMap = new ConcurrentHashMap<>();
-    protected Map<String, Map<Integer, FileOutputStream>> outputStreamsMap = new ConcurrentHashMap<>();
-
     private AtomicInteger id = new AtomicInteger(1);
 
-    protected Integer getStreamId() {
+    protected abstract void run();
+
+    protected abstract SocketThread getSocketThread();
+
+    protected abstract String getServerAddress();
+
+    protected abstract int getServerPort();
+
+    protected abstract String getUserName();
+
+    protected abstract boolean askGetFile (String senderName, String fileName);
+
+    protected abstract File getDirectoryFile ();
+
+    private Integer getStreamId() {
         return id.getAndIncrement();
-    }
-
-    protected String getServerAddress() {
-        ConsoleHelper.writeMessage("Введите адрес сервера");
-        return ConsoleHelper.readString();
-    }
-
-    protected int getServerPort() {
-        return ConsoleHelper.readInt();
-    }
-
-    protected String getUserName() {
-        ConsoleHelper.writeMessage("Введите имя пользователя");
-        return ConsoleHelper.readString();
-    }
-
-    protected void writeMessage(String message) {
-        ConsoleHelper.writeMessage(message);
-    }
-
-    protected boolean shouldSentTextFromConsole() {
-        return true;
-    }
-
-    protected SocketThread getSocketThread() {
-        return new SocketThread();
     }
 
     protected void sendTextMessage(String textMessage) {
@@ -89,16 +58,6 @@ public class Client{
         }
     }
 
-    protected void createPrivateMessage (){
-        ConsoleHelper.writeMessage("Введите точное имя получателя");
-        String receiverName = ConsoleHelper.readString();
-
-        ConsoleHelper.writeMessage("Наберите текст для приватного сообщения");
-        String privateMessage = ConsoleHelper.readString();
-
-        sendPrivateMessage(privateMessage, receiverName);
-    }
-
     protected void sendPrivateMessage(String privateMessage, String receiverName) {
         try {
             connection.send(MessageFactory.getPrivateMessage(privateMessage, receiverName));
@@ -107,17 +66,11 @@ public class Client{
         }
     }
 
-    protected void createFileMessageForAll() {
-        writeMessage("Введите полный путь к файлу, файл не должен превышать 10 мегобайт");
-
-        sendFileMessageForAll(new File(ConsoleHelper.readString()));
-    }
-
     protected void sendFileMessageForAll(File file) {
         if (!file.isFile()) {
-            writeMessage("Такого файла не существует");
+            messageHelper.writeErrorMessage("Такого файла не существует");
         } else if (file.length() > 1024*1024*10) {
-            writeMessage("Файл не должен превышать 10 мегобайт");
+            messageHelper.writeErrorMessage("Файл не должен превышать 10 мегобайт");
         } else {
             try (BufferedInputStream inputStream = new BufferedInputStream(new FileInputStream(file))){
                 byte[] bytes = new byte[inputStream.available()];
@@ -125,28 +78,12 @@ public class Client{
 
                 connection.send(MessageFactory.getFileMessageForAll(file.getName(), bytes));
 
-                writeMessage("Файл отправлен");
+                messageHelper.writeInfoMessage("Файл отправлен");
             } catch (FileNotFoundException e) {
-                writeMessage("Ошибка чтения файла");
+                messageHelper.writeErrorMessage("Ошибка чтения файла");
             } catch (IOException e) {
                 clientConnected = false;
             }
-        }
-    }
-
-    protected void createFileMessage() {
-        ConsoleHelper.writeMessage("Введите точное имя получателя");
-
-        String receiverName = ConsoleHelper.readString();
-
-        ConsoleHelper.writeMessage("Введите полный путь к файлу");
-
-        File file = new File(ConsoleHelper.readString());
-
-        if (file.isFile()) {
-            sendFileMessage(receiverName, file);
-        } else {
-            ConsoleHelper.writeMessage("Такого файла не существует");
         }
     }
 
@@ -156,129 +93,34 @@ public class Client{
 
             Integer id = getStreamId();
 
-            Map<Integer, FileInputStream> map = new HashMap<>();
-            map.put(id, inputStream);
+            synchronized (closeAndRemoveFromInputStreamsMapLock) {
+                if (inputStreamsMap.containsKey(receiverName)) {
+                    inputStreamsMap.get(receiverName).put(id, inputStream);
+                } else {
+                    Map<Integer, FileInputStream> map = new HashMap<>();
+                    map.put(id, inputStream);
 
-            inputStreamsMap.put(receiverName, map);
+                    inputStreamsMap.put(receiverName, map);
+                }
+            }
 
             connection.send(MessageFactory.getFileMessage(file.getName(), receiverName, id));
         } catch (FileNotFoundException e) {
-            writeMessage("Ошибка чтения файла");
+            messageHelper.writeErrorMessage("Ошибка чтения файла");
         } catch (IOException e) {
             clientConnected = false;
         }
     }
 
-    private boolean askForExit() {
-        while (true) {
-            if (inputStreamsMap.size() > 0 && outputStreamsMap.size() > 0) {
-                ConsoleHelper.writeMessage("У вас есть незавершенный прием и передача файлов, вы хотите прервать их? yes / no");
-            } else if (inputStreamsMap.size() > 0) {
-                ConsoleHelper.writeMessage("У вас есть незавершенная передача файлов, вы хотите прервать ее? yes / no");
-            } else if (outputStreamsMap.size() > 0) {
-                ConsoleHelper.writeMessage("У вас есть незавершенный прием файлов, вы хотите прервать его? yes / no");
-            } else {
-                return true;
-            }
-
-            String answer = ConsoleHelper.readString();
-            if (answer.equals("yes")) {
-                return true;
-            } else if (answer.equals("no")) {
-                return false;
-            }
-        }
-    }
-
-    public void run() {
-        SocketThread socketThread = getSocketThread();
-        socketThread.setDaemon(true);
-        socketThread.start();
-
-        synchronized (this) {
-            try {
-                wait();
-
-                if (clientConnected) {
-                    ConsoleHelper.writeMessage("Соединение установлено. Для выхода наберите команду 'exit'," +
-                            " наберите 'pm' для отправки приватного сообщения," +
-                            " наберите fm для отправки файла одному из пользывателей," +
-                            " или fmfa для всех пользователей.");
-
-                    runConsoleInputMessagesHandler();
-                } else {
-                    ConsoleHelper.writeMessage("Произошла ошибка во время работы клиента.");
-                }
-            } catch (InterruptedException e) {
-                clientConnected = false;
-            }
-        }
-    }
-
-    protected void runConsoleInputMessagesHandler() throws InterruptedException {
-        while (true) {
-            if (clientConnected) {
-                synchronized (fileRequestLock) {
-                    String s = ConsoleHelper.readString();
-                    if (s.equals("exit")) {
-                        if (askForExit()) {
-                            closeAndRemoveAllStreams(false);
-                            break;
-                        }
-                    } else if (s.equals("pm")) {
-                        createPrivateMessage();
-                    } else if (s.equals("fmfa")) {
-                        createFileMessageForAll();
-                    } else if (s.equals("fm")) {
-                        createFileMessage();
-                    } else if (shouldSentTextFromConsole()) {
-                        sendTextMessage(s);
-                    }
-
-                    fileRequestLock.wait(1);
-                }
-            } else {
-                ConsoleHelper.writeMessage("Произошла ошибка во время работы клиента соединение с сервером утеряно.");
-                closeAndRemoveAllStreams(true);
-                break;
-            }
-        }
-    }
-
-    public static void main(String[] args) {
-        Client client = new Client();
-        client.run();
-    }
-
-    protected boolean askGetFile (String senderName, String fileName) {
-        while (true) {
-            String questionMessage = String.format("Пользователь %s отправил вам файл %s," +
-                            " для получения введите yes для отказа введите no",
-                    senderName, fileName);
-            ConsoleHelper.writeMessage(questionMessage);
-
-            String answer = ConsoleHelper.readString();
-
-            switch (answer) {
-                case "yes":
-                    return true;
-                case "no":
-                    return false;
-            }
-        }
-    }
-
-    protected File getDirectoryFile () {
-        while (true) {
-            ConsoleHelper.writeMessage("Введите полный путь к папке для сохранения файла");
-
-            File file = new File(ConsoleHelper.readString());
-
-            if (file.isDirectory()) {
-                return file;
-            } else {
-                ConsoleHelper.writeMessage("Вы ввели неправельный путь, повторите еще раз!");
-            }
+    protected String askForExit() {
+        if (inputStreamsMap.size() > 0 && outputStreamsMap.size() > 0) {
+            return "У вас есть незавершенный прием и передача файлов, вы хотите прервать их? yes / no";
+        } else if (inputStreamsMap.size() > 0) {
+            return "У вас есть незавершенная передача файлов, вы хотите прервать ее? yes / no";
+        } else if (outputStreamsMap.size() > 0) {
+            return "У вас есть незавершенный прием файлов, вы хотите прервать его? yes / no";
+        } else {
+            return "Вы действительно хотите выйти из программы? yes / no";
         }
     }
 
@@ -339,7 +181,8 @@ public class Client{
                         File file = new File((String) pathField.get(inputStream));
 
                         if (showErrorMessage) {
-                            writeMessage(String.format("Ошибка передачи файла: %s учаснику: %s", file.getName(), receiverName));
+                            messageHelper.writeErrorMessage(String.format("Ошибка передачи файла: %s учаснику: %s"
+                                    , file.getName(), receiverName));
                         }
 
                         inputStream.close();
@@ -364,7 +207,8 @@ public class Client{
                         file = new File((String) pathField.get(outputStream));
 
                         if (showErrorMessage) {
-                            writeMessage(String.format("Ошибка приема файла: %s от учасника: %s", file.getName(), senderName));
+                            messageHelper.writeErrorMessage(String.format("Ошибка приема файла: %s от учасника: %s"
+                                    , file.getName(), senderName));
                         }
 
                         outputStream.close();
@@ -388,75 +232,76 @@ public class Client{
         }
     }
 
-    public class SocketThread extends Thread {
+    public abstract class SocketThread extends Thread {
         protected void processIncomingMessage(String message) {
-            ConsoleHelper.writeMessage(message);
-        }
-
-        protected void processSystemMessage(String systemMessage) {
-            ConsoleHelper.writeMessage("\u001B[34m" + systemMessage + "\u001B[0m");
+            messageHelper.writeTextMessage(message);
         }
 
         protected void processErrorMessage(String errorMessage) {
-            ConsoleHelper.writeMessage("\u001B[31m" + errorMessage + "\u001B[0m");
+            messageHelper.writeErrorMessage(errorMessage);
         }
 
         protected void processIncomingFileMessageForAll(Message fileMessageForAll) {
-            synchronized (fileRequestLock) {
-                if (askGetFile(fileMessageForAll.getSenderName(), fileMessageForAll.getData())) {
-                    File file = getDirectoryFile();
+            if (askGetFile(fileMessageForAll.getSenderName(), fileMessageForAll.getData())) {
+                File file = getDirectoryFile();
 
-                    try (FileOutputStream outputStream = new FileOutputStream(file.getPath() + File.separator + fileMessageForAll.getData())) {
-                        outputStream.write(fileMessageForAll.getBytes());
+                try (FileOutputStream outputStream = new FileOutputStream(file.getPath() + File.separator + fileMessageForAll.getData())) {
+                    outputStream.write(fileMessageForAll.getBytes());
 
-                        ConsoleHelper.writeMessage("Файл сохранен");
-                    } catch (IOException e) {
-                        ConsoleHelper.writeMessage("Ощибка сохранения файла");
-                    }
+                    messageHelper.writeInfoMessage("Файл сохранен");
+                } catch (IOException e) {
+                    messageHelper.writeErrorMessage("Ощибка сохранения файла");
                 }
             }
         }
 
         protected void processIncomingFileMessage(Message fileMessage) {
-            synchronized (fileRequestLock) {
-                if (askGetFile(fileMessage.getSenderName(), fileMessage.getData())) {
-                    File file = getDirectoryFile();
+            if (askGetFile(fileMessage.getSenderName(), fileMessage.getData())) {
+                File file = getDirectoryFile();
 
-                    try {
-                        FileOutputStream outputStream
-                                = new FileOutputStream(file.getPath() + File.separator + fileMessage.getData());
+                try {
+                    FileOutputStream outputStream
+                            = new FileOutputStream(file.getPath() + File.separator + fileMessage.getData());
+                    Integer id = getStreamId();
+                    String senderName = fileMessage.getSenderName();
 
-                        Integer id = getStreamId();
-
-                        Map<Integer, FileOutputStream> map = new HashMap<>();
-                        map.put(id, outputStream);
-                        outputStreamsMap.put(fileMessage.getSenderName(), map);
-
-                        connection.send(MessageFactory.getFileMessageAnswer(fileMessage, id));
-
-                        ConsoleHelper.writeMessage("Процес получения файла " + fileMessage.getData());
-                    } catch (FileNotFoundException e) {
-                        try {
-                            connection.send(MessageFactory.getFileTransferErrorResponseMessageFromClient(fileMessage));
-                        } catch (IOException e1) {
-                            clientConnected = false;
+                    synchronized (closeAndRemoveFromOutputStreamMapLock) {
+                        if (outputStreamsMap.containsKey(senderName)) {
+                            outputStreamsMap.get(senderName).put(id, outputStream);
+                        } else {
+                            Map<Integer, FileOutputStream> map = new HashMap<>();
+                            map.put(id, outputStream);
+                            outputStreamsMap.put(senderName, map);
                         }
-                        ConsoleHelper.writeMessage("Ощибка сохранения файла");
-                    } catch (IOException e) {
-                        clientConnected = false;
                     }
-                } else {
+
+                    connection.send(MessageFactory.getFileMessageAnswer(fileMessage, id));
+
+                    messageHelper.writeInfoMessage("Процес получения файла " + fileMessage.getData());
+                } catch (FileNotFoundException e) {
                     try {
-                        connection.send(MessageFactory.getFileCancelResponseMessage(fileMessage));
-                    } catch (IOException e) {
+                        connection.send(MessageFactory.getFileTransferErrorResponseMessageFromClient(fileMessage));
+                    } catch (IOException e1) {
                         clientConnected = false;
                     }
+                    messageHelper.writeErrorMessage("Ощибка сохранения файла");
+                } catch (IOException e) {
+                    clientConnected = false;
+                }
+            } else {
+                try {
+                    connection.send(MessageFactory.getFileCancelResponseMessage(fileMessage));
+                } catch (IOException e) {
+                    clientConnected = false;
                 }
             }
         }
 
         protected void processFileMessageRequest(Message requestMessage) {
-            if (requestMessage.getSenderInputStreamId() != Message.FILE_TRANSFER_ERROR) {
+            if (requestMessage.getSenderInputStreamId() == Message.FILE_TRANSFER_ERROR) {
+                closeAndRemoveStreamFromOutputStreamMap(requestMessage.getSenderName()
+                        , requestMessage.getReceiverOutputStreamId(), false);
+            } else {
                 try {
                     synchronized (closeAndRemoveFromOutputStreamMapLock) {
                         if (outputStreamsMap.containsKey(requestMessage.getSenderName()) &&
@@ -465,16 +310,16 @@ public class Client{
                             outputStreamsMap.get(requestMessage.getSenderName())
                                     .get(requestMessage.getReceiverOutputStreamId()).write(requestMessage.getBytes());
 
-                            if (requestMessage.getSenderInputStreamId() != Message.FILE_IS_UPLOADED) {
-                                connection.send(MessageFactory.getFileMessageResponse(requestMessage));
-                            } else {
+                            if (requestMessage.getSenderInputStreamId() == Message.FILE_IS_UPLOADED) {
                                 closeAndRemoveStreamFromOutputStreamMap(requestMessage.getSenderName()
                                         , requestMessage.getReceiverOutputStreamId(), true);
 
-                                writeMessage(String.format("Файл: %s от пользователя: %s загружен"
+                                messageHelper.writeInfoMessage(String.format("Файл: %s от пользователя: %s загружен"
                                         , requestMessage.getData(), requestMessage.getSenderName()));
 
                                 connection.send(MessageFactory.getFileIsDownloadedResponseMessage(requestMessage));
+                            } else {
+                                connection.send(MessageFactory.getFileMessageResponse(requestMessage));
                             }
                         }
                     }
@@ -483,9 +328,6 @@ public class Client{
                     clientConnected = false;
                 }
             }
-            else {
-                closeAndRemoveStreamFromOutputStreamMap(requestMessage.getSenderName(), requestMessage.getReceiverOutputStreamId(), false);
-            }
         }
 
         protected void processFileMessageResponse(Message responseMessage) {
@@ -493,7 +335,7 @@ public class Client{
                 closeAndRemoveStreamFromInputStreamsMap(responseMessage.getReceiverName()
                         , responseMessage.getSenderInputStreamId());
             } else if (responseMessage.getReceiverOutputStreamId() == Message.FILE_IS_DOWNLOADED) {
-                writeMessage(String.format("Пользователь: %s получил файл: %s"
+                messageHelper.writeInfoMessage(String.format("Пользователь: %s получил файл: %s"
                         , responseMessage.getReceiverName(), responseMessage.getData()));
             } else {
                 synchronized (closeAndRemoveFromInputStreamsMapLock) {
@@ -526,14 +368,14 @@ public class Client{
         }
 
         protected void informAboutAddingNewUser(String userName) {
-            ConsoleHelper.writeMessage("Участник с именем " + userName + " присоединился к чату");
+            messageHelper.writeInfoMessage("Участник с именем " + userName + " присоединился к чату");
         }
 
         protected void informAboutDeletingNewUser(String userName) {
             closeAndRemoveAllReceiverStreamsFromInputStreamsMap(userName, true);
             closeAndRemoveAllSenderStreamsFromOutputStreamsMap(userName, true);
 
-            ConsoleHelper.writeMessage("Участник с именем " + userName + " покинул чат");
+            messageHelper.writeInfoMessage("Участник с именем " + userName + " покинул чат");
         }
 
         protected void notifyConnectionStatusChanged(boolean clientConnected) {

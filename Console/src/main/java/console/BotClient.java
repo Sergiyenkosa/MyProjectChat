@@ -10,12 +10,17 @@ import java.util.concurrent.ThreadLocalRandom;
 /**
  * Created by s.sergienko on 18.10.2016.
  */
-public class BotClient extends Client{
+public class BotClient extends ConsoleClient{
     private static List<Integer> namesAndIndex = new ArrayList<>();
 
     @Override
     protected SocketThread getSocketThread() {
         return new BotSocketThread();
+    }
+
+    @Override
+    public void run() {
+        getSocketThread().run();
     }
 
     @Override

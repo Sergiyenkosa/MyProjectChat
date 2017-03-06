@@ -146,22 +146,8 @@ public class ClientGuiView {
         frame.addWindowListener(new WindowAdapter() {
             @Override
             public void windowClosing(WindowEvent e) {
-                if (controller.getInputStreamsMap().size() > 0 && controller.getOutputStreamsMap().size() > 0) {
-                    if(JOptionPane.showConfirmDialog(frame, "У вас есть незавершенный прием и передача файлов, вы хотите прервать их?") == JOptionPane.OK_OPTION){
-                        controller.closeAndRemoveAllStreams(false);
-                        System.exit(0);
-                    }
-                } else if (controller.getInputStreamsMap().size() > 0) {
-                    if(JOptionPane.showConfirmDialog(frame, "У вас есть незавершенная передача файлов, вы хотите прервать ее?") == JOptionPane.OK_OPTION){
-                        controller.closeAndRemoveAllStreams(false);
-                        System.exit(0);
-                    }
-                } else if (controller.getOutputStreamsMap().size() > 0) {
-                    if(JOptionPane.showConfirmDialog(frame, "У вас есть незавершенный прием файлов, вы хотите прервать его?") == JOptionPane.OK_OPTION){
-                        controller.closeAndRemoveAllStreams(false);
-                        System.exit(0);
-                    }
-                } else {
+                if(JOptionPane.showConfirmDialog(frame, controller.askForExit()) == JOptionPane.OK_OPTION){
+                    controller.closeAndRemoveAllStreams(false);
                     System.exit(0);
                 }
             }

@@ -8,8 +8,6 @@ public interface TextMessageHelper {
 
     void writeInfoMessage(String infoMessage);
 
-    void writeProgramMessage(String programMessage);
-
     void writeErrorMessage(String errorMessage);
 
     String readString();

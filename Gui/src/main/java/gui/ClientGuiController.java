@@ -1,15 +1,8 @@
 package gui;
 
 import console.Client;
-import messages.Message;
 
 import java.io.*;
-import java.util.HashMap;
-import java.util.Map;
-
-import static messages.Message.FILE_CANCEL;
-import static messages.Message.FILE_TRANSFER_ERROR;
-import static messages.Message.MessageType.FILE_MESSAGE_RESPONSE;
 
 
 /**
@@ -44,16 +37,6 @@ public class ClientGuiController extends Client {
     protected String getUserName() {
         userName = view.getUserName();
         return userName;
-    }
-
-    @Override
-    protected void writeMessage(String message) {
-        if (message.toLowerCase().contains("ошибка")) {
-            view.errorMessage(message);
-        }
-        else {
-            view.infoMessage(message);
-        }
     }
 
     @Override
@@ -125,6 +108,11 @@ public class ClientGuiController extends Client {
         super.sendTextMessage(textMessage);
     }
 
+    @Override
+    protected String askForExit() {
+        return super.askForExit();
+    }
+
     //temporarily end
 
     public class GuiSocketThread extends Client.SocketThread {
@@ -143,59 +131,6 @@ public class ClientGuiController extends Client {
 //                processIncomingMessage("Приватное сообщение от " + message);
 //            }
 //        }
-
-        @Override
-        protected void processIncomingFileMessageForAll(Message fileMessageForAll) {
-            if(askGetFile(fileMessageForAll.getSenderName(), fileMessageForAll.getData())) {
-                File file = getDirectoryFile();
-
-                try (FileOutputStream outputStream = new FileOutputStream(file.getPath() + File.separator + fileMessageForAll.getData())){
-                    outputStream.write(fileMessageForAll.getBytes());
-
-                    writeMessage("Файл сохранен");
-                }
-                catch (IOException e) {
-                    writeMessage("Ошибка сохранения файла");
-                }
-            }
-        }
-
-        @Override
-        protected void processIncomingFileMessage(Message fileMessage) {
-            fileMessage.setType(FILE_MESSAGE_RESPONSE);
-
-            if (askGetFile(fileMessage.getSenderName(), fileMessage.getData())) {
-                File file = getDirectoryFile();
-
-                try {
-                    FileOutputStream outputStream = new FileOutputStream(file.getPath() + File.separator + fileMessage.getData());
-
-                    int id = ClientGuiController.this.getStreamId();
-
-                    Map<Integer, FileOutputStream> map = new HashMap<>();
-                    map.put(id, outputStream);
-                    outputStreamsMap.put(fileMessage.getSenderName(), map);
-
-                    fileMessage.setReceiverOutputStreamId(id);
-
-                    writeMessage("Процес получения файла " + fileMessage.getData());
-                }
-                catch (FileNotFoundException e) {
-                    fileMessage.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
-
-                    writeMessage("Ошибка сохранения файла");
-                }
-            }
-            else {
-                fileMessage.setReceiverOutputStreamId(FILE_CANCEL);
-            }
-
-            try {
-                connection.send(fileMessage);
-            } catch (IOException e) {
-                clientConnected = false;
-            }
-        }
 
         @Override
         protected void informAboutAddingNewUser(String userName) {

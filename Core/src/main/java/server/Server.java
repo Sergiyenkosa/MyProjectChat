@@ -130,7 +130,7 @@ public class Server {
         try {
             Connection senderConnection = connectionMap.get(message.getSenderName());
 
-            if (receiverFileId < 0) {
+            if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR) {
                 senderConnection.send(message);
 
                 String cause = receiverFileId == Message.FILE_CANCEL
@@ -139,7 +139,7 @@ public class Server {
                 String errorMessage = String.format(cause + ": %s.",
                         message.getReceiverName(), message.getData());
                 senderConnection.send(MessageFactory.getErrorMessage(errorMessage));
-            } else if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR){
+            } else {
                 senderConnection.send(message);
             }
         } catch (IOException | NullPointerException e) {
@@ -206,6 +206,12 @@ public class Server {
                 throws IOException, ClassNotFoundException {
             while (true) {
                 Message message = connection.receive();
+
+                try {
+                    Thread.sleep(100);
+                } catch (InterruptedException e) {
+                    e.printStackTrace();
+                }
 
                 switch (message.getType()) {
                     case TEXT_MESSAGE:
