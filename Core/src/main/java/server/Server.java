@@ -2,8 +2,12 @@ package server;
 
 import connection.Connection;
 import connection.impl.ConnectionImpl;
+import daos.StorageDao;
+import daos.UserDao;
 import messages.Message;
 import messages.MessageFactory;
+import org.apache.log4j.Logger;
+import org.springframework.context.ApplicationContext;
 import org.springframework.context.support.ClassPathXmlApplicationContext;
 import server.validators.TextMessageValidator;
 
@@ -21,27 +25,34 @@ import static messages.Message.*;
 public class Server {
     private final ServerSocket serverSocket;
     private final TextMessageValidator textMessageValidator;
+    private final StorageDao storageDao;
+    private static final Logger log = Logger.getLogger(Server.class);
     private Map<String, Connection> connectionMap = new ConcurrentHashMap<>();
 
-    public Server(ServerSocket serverSocket, TextMessageValidator textMessageValidator) {
+    public Server(ServerSocket serverSocket, TextMessageValidator textMessageValidator, StorageDao storageDao) {
         this.serverSocket = serverSocket;
         this.textMessageValidator = textMessageValidator;
+        this.storageDao = storageDao;
     }
 
     public void runServer() {
-        ConsoleHelper.writeMessage("The server is running");
+        String serverCondition = "The server is running";
+
+        System.out.println(serverCondition);
+        log.info(serverCondition);
+        System.out.println();
 
         try {
             while (true) {
                 new Handler(serverSocket.accept()).start();
             }
         } catch (IOException e) {
-            e.printStackTrace();
+            log.error(e);
         }
     }
 
     public static void main(String[] args) {
-        ClassPathXmlApplicationContext context
+        ApplicationContext context
                 = new ClassPathXmlApplicationContext("spring/core-context.xml");
 
         Server server = (Server) context.getBean("server");
@@ -67,8 +78,8 @@ public class Server {
             try {
                 entry.getValue().send(message);
             } catch (IOException e) {
-                ConsoleHelper.writeMessage("Произошла ошибка при обмене данными с удаленным адресом: "
-                        + entry.getValue().getRemoteSocketAddress());
+                log.error("Произошла ошибка при обмене данными с удаленным адресом: "
+                        + entry.getValue().getRemoteSocketAddress(), e);
             }
         }
     }
@@ -93,7 +104,7 @@ public class Server {
                 try {
                     entry.getValue().send(message);
                 } catch (IOException e) {
-                    e.printStackTrace();
+                    log.error(e);
                 }
             }
         }
@@ -108,7 +119,15 @@ public class Server {
                     + " не отправлен, вы не можете отправить файл самому себе";
             connection.send(MessageFactory.getErrorMessage(errorMessage));
         } else {
-            sendFileMessageRequest(connection, message);
+            try {
+                connectionMap.get(message.getReceiverName()).send(message);
+            } catch (IOException | NullPointerException e) {
+                connection.send(MessageFactory.getFileTransferErrorResponseMessageFromServer(message));
+
+                String errorMessage = String.format("Ошибка, фаил: %s не отправлен, пользователь: " +
+                        "%s отсутствует или покинул чат.", message.getData(), message.getReceiverName());
+                connection.send(MessageFactory.getErrorMessage(errorMessage));
+            }
         }
     }
 
@@ -116,11 +135,7 @@ public class Server {
         try {
             connectionMap.get(message.getReceiverName()).send(message);
         } catch (IOException | NullPointerException e) {
-            connection.send(MessageFactory.getFileTransferErrorResponseMessageFromServer(message));
-
-            String errorMessage = String.format("Ошибка, фаил: %s не отправлен, пользователь: " +
-                    "%s отсутствует или покинул чат.", message.getData(), message.getReceiverName());
-            connection.send(MessageFactory.getErrorMessage(errorMessage));
+            log.error(e);
         }
     }
 
@@ -129,8 +144,13 @@ public class Server {
 
         try {
             Connection senderConnection = connectionMap.get(message.getSenderName());
+            senderConnection.send(message);
 
-            if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR) {
+            if (receiverFileId == FILE_IS_DOWNLOADED) {
+                String infoMessage = String.format("Пользователь: %s получил файл: %s"
+                        , message.getReceiverName(), message.getData());
+                senderConnection.send(MessageFactory.getInfoMessage(infoMessage));
+            } else if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR) {
                 senderConnection.send(message);
 
                 String cause = receiverFileId == Message.FILE_CANCEL
@@ -143,16 +163,7 @@ public class Server {
                 senderConnection.send(message);
             }
         } catch (IOException | NullPointerException e) {
-            if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR
-                    || receiverFileId == FILE_IS_DOWNLOADED) {
-                e.printStackTrace();
-            } else {
-                connection.send(MessageFactory.getFileTransferErrorRequestMessageFromServer(message));
-
-                String errorMessage = String.format("Ошибка, фаил: %s не принят, пользователь: "
-                        + "%s отсутствует или покинул чат.", message.getData(), message.getSenderName());
-                connection.send(MessageFactory.getErrorMessage(errorMessage));
-            }
+            log.error(e);
         }
     }
 
@@ -168,28 +179,41 @@ public class Server {
                 connection.send(MessageFactory.getNameRequestMessage());
 
                 Message message = connection.receive();
+                switch (message.getType()) {
+                    case USER_NAME:
+                        String name = message.getData();
+                        UserDao userDao;
 
-                if (message.getType() == MessageType.USER_NAME) {
-                    String name = message.getData();
+                        if (connectionMap.containsKey(name)) {
+                            String errorMessage = "Пользователь с таким именем уже подключен к чату.";
+                            connection.send(MessageFactory.getErrorMessage(errorMessage));
+                            break;
+                        } else if ((userDao = storageDao.findByLogin(name)) != null) {
+                            connection.send(MessageFactory.getPasswordRequestMessage());
 
-                    if (connectionMap.containsKey(name)) {
-                        String errorMessage = "Пользователь с таким именем уже подключен к чату.";
-                        connection.send(MessageFactory.getErrorMessage(errorMessage));
-                    } else if (name.matches("^\\w{1,20}$")) {
-                        connectionMap.put(name, connection);
+                            message = connection.receive();
+                            if (message.getType() == MessageType.USER_PASSWORD) {
+                                if (message.getData().equals(userDao.getPassword())) {
+                                    connectionMap.put(name, connection);
 
-                        connection.send(MessageFactory.getNameAcceptedMessage());
+                                    connection.send(MessageFactory.getNameAcceptedMessage());
 
-                        return name;
-                    } else {
-                        String errorMessage = name.isEmpty() ? "Error: The name is empty, try again."
-                                : "Error: The name contains illegal chars, try again.";
-                        connection.send(MessageFactory.getErrorMessage(errorMessage));
-                    }
-                } else {
-                    ConsoleHelper.writeMessage("Ошибка формата сообщения: " + message.getType());
+                                    return name;
+                                } else {
+                                    String errorMessage = "Ошибка, неверный пароль";
+                                    connection.send(MessageFactory.getErrorMessage(errorMessage));
+                                    break;
+                                }
+                            }
+                        } else {
+                            String errorMessage = "Ошибка, такого пользователя не существует в базе данных";
+                            connection.send(MessageFactory.getErrorMessage(errorMessage));
+                            break;
+                        }
+                    default:
+                        log.error("Ошибка формата сообщения: " + message.getType());
 
-                    throw new IOException();
+                        throw new IOException();
                 }
             }
         }
@@ -210,7 +234,7 @@ public class Server {
                 try {
                     Thread.sleep(100);
                 } catch (InterruptedException e) {
-                    e.printStackTrace();
+                    log.error(e);
                 }
 
                 switch (message.getType()) {
@@ -241,14 +265,14 @@ public class Server {
                         sendFileMessageForAll(message);
                         break;
                     default:
-                        ConsoleHelper.writeMessage("Ошибка формата сообщения: " + message.getType());
+                        log.error("Ошибка формата сообщения: " + message.getType());
                 }
             }
         }
 
         @Override
         public void run() {
-            ConsoleHelper.writeMessage("установлено новое соединение с удаленным адресом: "
+            log.info("установлено новое соединение с удаленным адресом: "
                     + socket.getRemoteSocketAddress());
 
             String userName = "";
@@ -261,8 +285,8 @@ public class Server {
 
                 serverMainLoop(connection, userName);
             } catch (IOException | ClassNotFoundException e) {
-                ConsoleHelper.writeMessage("Произошла ошибка при обмене данными с удаленным адресом: "
-                        + socket.getRemoteSocketAddress());
+                log.error("Произошла ошибка при обмене данными с удаленным адресом: "
+                        + socket.getRemoteSocketAddress(), e);
             }
 
             if (!userName.equals("")) {
@@ -271,7 +295,7 @@ public class Server {
                 sendBroadcastMessage(MessageFactory.getUserRemovedMessage(userName));
             }
 
-            ConsoleHelper.writeMessage("Соединение с удаленным адресом: "
+            log.info("Соединение с удаленным адресом: "
                     + socket.getRemoteSocketAddress() + " закрыто");
         }
     }

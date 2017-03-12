@@ -1,6 +1,6 @@
-package messagehandlers.impl;
+package messagehalper.impl;
 
-import messagehandlers.TextMessageHelper;
+import messagehalper.ConsoleHelper;
 
 import java.io.BufferedReader;
 import java.io.IOException;
@@ -9,21 +9,21 @@ import java.io.InputStreamReader;
 /**
  * Created by s.sergienko on 03.03.2017.
  */
-public class TextMessageConsoleHelper implements TextMessageHelper{
+public class ConsoleHelperImpl implements ConsoleHelper {
     private BufferedReader reader = new BufferedReader(new InputStreamReader(System.in));
 
     @Override
-    public void writeTextMessage(String textMessage) {
+    public synchronized void writeTextMessage(String textMessage) {
         System.out.println(textMessage);
     }
 
     @Override
-    public void writeInfoMessage(String infoMessage) {
+    public synchronized void writeInfoMessage(String infoMessage) {
         System.out.println("\u001B[34m" + infoMessage + "\u001B[0m");
     }
 
     @Override
-    public void writeErrorMessage(String errorMessage) {
+    public synchronized void writeErrorMessage(String errorMessage) {
         System.out.println("\u001B[31m" + errorMessage + "\u001B[0m");
     }
 

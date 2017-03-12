@@ -1,9 +1,7 @@
-package console;
+package client;
 
 import connection.Connection;
 import connection.impl.ConnectionImpl;
-import messagehandlers.TextMessageHelper;
-import messagehandlers.impl.TextMessageConsoleHelper;
 import messages.Message;
 import messages.MessageFactory;
 
@@ -25,7 +23,6 @@ public abstract class Client{
     protected volatile boolean clientConnected = false;
     private Map<String, Map<Integer, FileInputStream>> inputStreamsMap = new ConcurrentHashMap<>();
     private Map<String, Map<Integer, FileOutputStream>> outputStreamsMap = new ConcurrentHashMap<>();
-    public TextMessageHelper messageHelper = new TextMessageConsoleHelper();
 
     private final Object closeAndRemoveFromInputStreamsMapLock = new Object();
     private final Object closeAndRemoveFromOutputStreamMapLock = new Object();
@@ -41,6 +38,12 @@ public abstract class Client{
     protected abstract int getServerPort();
 
     protected abstract String getUserName();
+
+    protected abstract String getUserPassword();
+
+    protected abstract void writeInfoMessage(String infoMessage);
+
+    protected abstract void writeErrorMessage(String errorMessage);
 
     protected abstract boolean askGetFile (String senderName, String fileName);
 
@@ -68,9 +71,9 @@ public abstract class Client{
 
     protected void sendFileMessageForAll(File file) {
         if (!file.isFile()) {
-            messageHelper.writeErrorMessage("Такого файла не существует");
+            writeErrorMessage("Такого файла не существует");
         } else if (file.length() > 1024*1024*10) {
-            messageHelper.writeErrorMessage("Файл не должен превышать 10 мегобайт");
+            writeErrorMessage("Файл не должен превышать 10 мегобайт");
         } else {
             try (BufferedInputStream inputStream = new BufferedInputStream(new FileInputStream(file))){
                 byte[] bytes = new byte[inputStream.available()];
@@ -78,9 +81,9 @@ public abstract class Client{
 
                 connection.send(MessageFactory.getFileMessageForAll(file.getName(), bytes));
 
-                messageHelper.writeInfoMessage("Файл отправлен");
+                writeInfoMessage("Файл отправлен");
             } catch (FileNotFoundException e) {
-                messageHelper.writeErrorMessage("Ошибка чтения файла");
+                writeErrorMessage("Ошибка чтения файла");
             } catch (IOException e) {
                 clientConnected = false;
             }
@@ -106,7 +109,7 @@ public abstract class Client{
 
             connection.send(MessageFactory.getFileMessage(file.getName(), receiverName, id));
         } catch (FileNotFoundException e) {
-            messageHelper.writeErrorMessage("Ошибка чтения файла");
+            writeErrorMessage("Ошибка чтения файла");
         } catch (IOException e) {
             clientConnected = false;
         }
@@ -127,6 +130,8 @@ public abstract class Client{
     protected void closeAndRemoveStreamFromInputStreamsMap(String receiverName, int fileSenderId) {
         synchronized (closeAndRemoveFromInputStreamsMapLock) {
             if (inputStreamsMap.containsKey(receiverName) && inputStreamsMap.get(receiverName).containsKey(fileSenderId)) {
+
+
                 try(FileInputStream inputStream = inputStreamsMap.get(receiverName).get(fileSenderId)) {
                     inputStream.close();
                 } catch (IOException e) {
@@ -181,7 +186,7 @@ public abstract class Client{
                         File file = new File((String) pathField.get(inputStream));
 
                         if (showErrorMessage) {
-                            messageHelper.writeErrorMessage(String.format("Ошибка передачи файла: %s учаснику: %s"
+                            writeErrorMessage(String.format("Ошибка передачи файла: %s учаснику: %s"
                                     , file.getName(), receiverName));
                         }
 
@@ -207,7 +212,7 @@ public abstract class Client{
                         file = new File((String) pathField.get(outputStream));
 
                         if (showErrorMessage) {
-                            messageHelper.writeErrorMessage(String.format("Ошибка приема файла: %s от учасника: %s"
+                            writeErrorMessage(String.format("Ошибка приема файла: %s от учасника: %s"
                                     , file.getName(), senderName));
                         }
 
@@ -215,6 +220,7 @@ public abstract class Client{
                     } catch (IOException | IllegalAccessException | NoSuchFieldException e) {
                         e.printStackTrace();
                     }
+
                     file.delete();
                 }
                 outputStreamsMap.remove(senderName);
@@ -233,12 +239,20 @@ public abstract class Client{
     }
 
     public abstract class SocketThread extends Thread {
-        protected void processIncomingMessage(String message) {
-            messageHelper.writeTextMessage(message);
+        protected abstract void processIncomingMessage(String message);
+
+        protected abstract void informAboutAddingNewUser(String userName);
+
+        protected abstract void informAboutDeletingNewUser(String userName);
+
+        protected abstract void notifyConnectionStatusChanged(boolean clientConnected);
+
+        protected void processInfoMessage(String infoMessage) {
+            writeInfoMessage(infoMessage);
         }
 
         protected void processErrorMessage(String errorMessage) {
-            messageHelper.writeErrorMessage(errorMessage);
+            writeErrorMessage(errorMessage);
         }
 
         protected void processIncomingFileMessageForAll(Message fileMessageForAll) {
@@ -248,9 +262,9 @@ public abstract class Client{
                 try (FileOutputStream outputStream = new FileOutputStream(file.getPath() + File.separator + fileMessageForAll.getData())) {
                     outputStream.write(fileMessageForAll.getBytes());
 
-                    messageHelper.writeInfoMessage("Файл сохранен");
+                    writeInfoMessage("Файл сохранен");
                 } catch (IOException e) {
-                    messageHelper.writeErrorMessage("Ощибка сохранения файла");
+                    writeErrorMessage("Ощибка сохранения файла");
                 }
             }
         }
@@ -277,14 +291,14 @@ public abstract class Client{
 
                     connection.send(MessageFactory.getFileMessageAnswer(fileMessage, id));
 
-                    messageHelper.writeInfoMessage("Процес получения файла " + fileMessage.getData());
+                    writeInfoMessage("Процес получения файла " + fileMessage.getData());
                 } catch (FileNotFoundException e) {
                     try {
                         connection.send(MessageFactory.getFileTransferErrorResponseMessageFromClient(fileMessage));
                     } catch (IOException e1) {
                         clientConnected = false;
                     }
-                    messageHelper.writeErrorMessage("Ощибка сохранения файла");
+                    writeErrorMessage("Ощибка сохранения файла");
                 } catch (IOException e) {
                     clientConnected = false;
                 }
@@ -314,7 +328,7 @@ public abstract class Client{
                                 closeAndRemoveStreamFromOutputStreamMap(requestMessage.getSenderName()
                                         , requestMessage.getReceiverOutputStreamId(), true);
 
-                                messageHelper.writeInfoMessage(String.format("Файл: %s от пользователя: %s загружен"
+                                writeInfoMessage(String.format("Файл: %s от пользователя: %s загружен"
                                         , requestMessage.getData(), requestMessage.getSenderName()));
 
                                 connection.send(MessageFactory.getFileIsDownloadedResponseMessage(requestMessage));
@@ -331,17 +345,14 @@ public abstract class Client{
         }
 
         protected void processFileMessageResponse(Message responseMessage) {
-            if (responseMessage.getReceiverOutputStreamId() == Message.FILE_TRANSFER_ERROR) {
-                closeAndRemoveStreamFromInputStreamsMap(responseMessage.getReceiverName()
-                        , responseMessage.getSenderInputStreamId());
-            } else if (responseMessage.getReceiverOutputStreamId() == Message.FILE_IS_DOWNLOADED) {
-                messageHelper.writeInfoMessage(String.format("Пользователь: %s получил файл: %s"
-                        , responseMessage.getReceiverName(), responseMessage.getData()));
-            } else {
-                synchronized (closeAndRemoveFromInputStreamsMapLock) {
-                    if (inputStreamsMap.containsKey(responseMessage.getReceiverName()) &&
-                            inputStreamsMap.get(responseMessage.getReceiverName())
-                                    .containsKey(responseMessage.getSenderInputStreamId())) {
+            synchronized (closeAndRemoveFromInputStreamsMapLock) {
+                if (inputStreamsMap.containsKey(responseMessage.getReceiverName()) &&
+                        inputStreamsMap.get(responseMessage.getReceiverName())
+                                .containsKey(responseMessage.getSenderInputStreamId())) {
+                    if (responseMessage.getReceiverOutputStreamId() < 0) {
+                        closeAndRemoveStreamFromInputStreamsMap(responseMessage.getReceiverName()
+                                , responseMessage.getSenderInputStreamId());
+                    } else {
                         FileInputStream inputStream = inputStreamsMap.get(responseMessage.getReceiverName())
                                 .get(responseMessage.getSenderInputStreamId());
 
@@ -367,35 +378,18 @@ public abstract class Client{
             }
         }
 
-        protected void informAboutAddingNewUser(String userName) {
-            messageHelper.writeInfoMessage("Участник с именем " + userName + " присоединился к чату");
-        }
-
-        protected void informAboutDeletingNewUser(String userName) {
-            closeAndRemoveAllReceiverStreamsFromInputStreamsMap(userName, true);
-            closeAndRemoveAllSenderStreamsFromOutputStreamsMap(userName, true);
-
-            messageHelper.writeInfoMessage("Участник с именем " + userName + " покинул чат");
-        }
-
-        protected void notifyConnectionStatusChanged(boolean clientConnected) {
-            Client.this.clientConnected = clientConnected;
-
-            synchronized (Client.this) {
-                Client.this.notify();
-            }
-        }
-
         protected void clientHandshake() throws IOException, ClassNotFoundException {
             while (true) {
                 Message message = connection.receive();
 
-                if (message.getType() == (MessageType.NAME_REQUEST)) {
+                if (message.getType() == MessageType.NAME_REQUEST) {
                     connection.send(MessageFactory.getUserNameMessage(getUserName()));
-                } else if (message.getType() == (MessageType.NAME_ACCEPTED)) {
+                } else if (message.getType() == MessageType.PASSWORD_REQUEST) {
+                    connection.send(MessageFactory.getUserPasswordMessage(getUserPassword()));
+                } else if (message.getType() == MessageType.NAME_ACCEPTED) {
                     notifyConnectionStatusChanged(true);
                     break;
-                } else if (message.getType() == (MessageType.ERROR_MESSAGE)) {
+                } else if (message.getType() == MessageType.ERROR_MESSAGE) {
                     processErrorMessage(message.getData());
                 } else {
                     throw new IOException("Unexpected MessageType");
@@ -406,34 +400,30 @@ public abstract class Client{
         protected void clientMainLoop() throws IOException, ClassNotFoundException {
             while (clientConnected) {
                 Message message = connection.receive();
+                MessageType messageType = message.getType();
 
-                new Thread() {
-                    @Override
-                    public void run() {
-                        MessageType messageType = message.getType();
-
-                        if (messageType == MessageType.FILE_MESSAGE_REQUEST) {
-                            processFileMessageRequest(message);
-                        } else if (messageType == MessageType.FILE_MESSAGE_RESPONSE) {
-                            processFileMessageResponse(message);
-                        } else if (messageType == MessageType.TEXT_MESSAGE) {
-                            processIncomingMessage(message.getData());
-                        } else if (messageType == MessageType.ERROR_MESSAGE) {
-                            processErrorMessage(message.getData());
-                        } else if (messageType == MessageType.USER_ADDED) {
-                            informAboutAddingNewUser(message.getData());
-                        } else if (messageType == MessageType.USER_REMOVED) {
-                            informAboutDeletingNewUser(message.getData());
-                        } else if (messageType == MessageType.FILE_MESSAGE) {
-                            processIncomingFileMessage(message);
-                        } else if (messageType == MessageType.FILE_MESSAGE_FOR_ALL) {
-                            processIncomingFileMessageForAll(message);
-                        } else {
-                            clientConnected = false;
-                            throw new RuntimeException("Unexpected MessageType: " + message.getType());
-                        }
-                    }
-                }.start();
+                if (messageType == MessageType.FILE_MESSAGE_REQUEST) {
+                    new Thread(() -> processFileMessageRequest(message)).start();
+                } else if (messageType == MessageType.FILE_MESSAGE_RESPONSE) {
+                    new Thread(() -> processFileMessageResponse(message)).start();
+                } else if (messageType == MessageType.TEXT_MESSAGE) {
+                    processIncomingMessage(message.getData());
+                } else if (messageType == MessageType.INFO_MESSAGE) {
+                    processInfoMessage(message.getData());
+                }else if (messageType == MessageType.ERROR_MESSAGE) {
+                    processErrorMessage(message.getData());
+                } else if (messageType == MessageType.USER_ADDED) {
+                    informAboutAddingNewUser(message.getData());
+                } else if (messageType == MessageType.USER_REMOVED) {
+                    informAboutDeletingNewUser(message.getData());
+                } else if (messageType == MessageType.FILE_MESSAGE) {
+                    processIncomingFileMessage(message);
+                } else if (messageType == MessageType.FILE_MESSAGE_FOR_ALL) {
+                    processIncomingFileMessageForAll(message);
+                } else {
+                    clientConnected = false;
+                    throw new RuntimeException("Unexpected MessageType: " + message.getType());
+                }
             }
         }
 

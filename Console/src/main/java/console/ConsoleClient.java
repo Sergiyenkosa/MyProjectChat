@@ -1,5 +1,8 @@
 package console;
 
+import client.Client;
+import messagehalper.ConsoleHelper;
+import messagehalper.impl.ConsoleHelperImpl;
 import messages.Message;
 
 import java.io.File;
@@ -7,8 +10,13 @@ import java.io.File;
 /**
  * Created by s.sergienko on 06.03.2017.
  */
-public class ConsoleClient extends Client{
+public class ConsoleClient extends Client {
+    private ConsoleHelper consoleHelper = new ConsoleHelperImpl();
     private final Object fileRequestLock = new Object();
+
+    public void setConsoleHelper(ConsoleHelper consoleHelper) {
+        this.consoleHelper = consoleHelper;
+    }
 
     public static void main(String[] args) {
         new ConsoleClient().run();
@@ -30,14 +38,14 @@ public class ConsoleClient extends Client{
                 wait();
 
                 if (clientConnected) {
-                    messageHelper.writeInfoMessage("Соединение установлено. Для выхода наберите команду 'exit'," +
+                    consoleHelper.writeInfoMessage("Соединение установлено. Для выхода наберите команду 'exit'," +
                             " наберите 'pm' для отправки приватного сообщения," +
                             " наберите fm для отправки файла одному из пользывателей," +
                             " или fmfa для всех пользователей.");
 
                     runConsoleInputMessagesHandler();
                 } else {
-                    messageHelper.writeErrorMessage("Произошла ошибка во время работы клиента.");
+                    consoleHelper.writeErrorMessage("Произошла ошибка во время работы клиента.");
                 }
             } catch (InterruptedException e) {
                 clientConnected = false;
@@ -47,19 +55,35 @@ public class ConsoleClient extends Client{
 
     @Override
     protected String getServerAddress() {
-        messageHelper.writeInfoMessage("Введите адрес сервера");
-        return messageHelper.readString();
+        consoleHelper.writeInfoMessage("Введите адрес сервера");
+        return consoleHelper.readString();
     }
 
     @Override
     protected int getServerPort() {
-        return messageHelper.readInt();
+        return consoleHelper.readInt();
     }
 
     @Override
     protected String getUserName() {
-        messageHelper.writeInfoMessage("Введите имя пользователя");
-        return messageHelper.readString();
+        consoleHelper.writeInfoMessage("Введите имя пользователя");
+        return consoleHelper.readString();
+    }
+
+    @Override
+    protected String getUserPassword() {
+        consoleHelper.writeInfoMessage("Введите пароль");
+        return consoleHelper.readString();
+    }
+
+    @Override
+    protected void writeInfoMessage(String infoMessage) {
+        consoleHelper.writeInfoMessage(infoMessage);
+    }
+
+    @Override
+    protected void writeErrorMessage(String errorMessage) {
+        consoleHelper.writeErrorMessage(errorMessage);
     }
 
     @Override
@@ -68,9 +92,9 @@ public class ConsoleClient extends Client{
             String questionMessage = String.format("Пользователь %s отправил вам файл %s," +
                             " для получения введите yes для отказа введите no",
                     senderName, fileName);
-            messageHelper.writeInfoMessage(questionMessage);
+            consoleHelper.writeInfoMessage(questionMessage);
 
-            String answer = messageHelper.readString();
+            String answer = consoleHelper.readString();
 
             switch (answer) {
                 case "yes":
@@ -84,14 +108,14 @@ public class ConsoleClient extends Client{
     @Override
     protected File getDirectoryFile () {
         while (true) {
-            messageHelper.writeInfoMessage("Введите полный путь к папке для сохранения файла");
+            consoleHelper.writeInfoMessage("Введите полный путь к папке для сохранения файла");
 
-            File file = new File(messageHelper.readString());
+            File file = new File(consoleHelper.readString());
 
             if (file.isDirectory()) {
                 return file;
             } else {
-                messageHelper.writeErrorMessage("Вы ввели неправельный путь, повторите еще раз!");
+                consoleHelper.writeErrorMessage("Вы ввели неправельный путь, повторите еще раз!");
             }
         }
     }
@@ -104,11 +128,11 @@ public class ConsoleClient extends Client{
         while (true) {
             if (clientConnected) {
                 synchronized (fileRequestLock) {
-                    String s = messageHelper.readString();
+                    String s = consoleHelper.readString();
                     if (s.equals("exit")) {
-                        messageHelper.writeInfoMessage(askForExit());
+                        consoleHelper.writeInfoMessage(askForExit());
 
-                        String answer = messageHelper.readString();
+                        String answer = consoleHelper.readString();
                         if (answer.equals("yes")) {
                             closeAndRemoveAllStreams(false);
 
@@ -127,7 +151,7 @@ public class ConsoleClient extends Client{
                     fileRequestLock.wait(1);
                 }
             } else {
-                messageHelper.writeErrorMessage("Произошла ошибка во время работы клиента соединение с сервером утеряно.");
+                consoleHelper.writeErrorMessage("Произошла ошибка во время работы клиента соединение с сервером утеряно.");
                 closeAndRemoveAllStreams(true);
                 break;
             }
@@ -135,38 +159,44 @@ public class ConsoleClient extends Client{
     }
 
     private void createPrivateMessage (){
-        messageHelper.writeInfoMessage("Введите точное имя получателя");
-        String receiverName = messageHelper.readString();
+        consoleHelper.writeInfoMessage("Введите точное имя получателя");
+        String receiverName = consoleHelper.readString();
 
-        messageHelper.writeInfoMessage("Наберите текст для приватного сообщения");
-        String privateMessage = messageHelper.readString();
+        consoleHelper.writeInfoMessage("Наберите текст для приватного сообщения");
+        String privateMessage = consoleHelper.readString();
 
         sendPrivateMessage(privateMessage, receiverName);
     }
 
     private void createFileMessageForAll() {
-        messageHelper.writeInfoMessage("Введите полный путь к файлу, файл не должен превышать 10 мегобайт");
+        consoleHelper.writeInfoMessage("Введите полный путь к файлу, файл не должен превышать 10 мегобайт");
 
-        sendFileMessageForAll(new File(messageHelper.readString()));
+        sendFileMessageForAll(new File(consoleHelper.readString()));
     }
 
     private void createFileMessage() {
-        messageHelper.writeInfoMessage("Введите точное имя получателя");
+        consoleHelper.writeInfoMessage("Введите точное имя получателя");
 
-        String receiverName = messageHelper.readString();
+        String receiverName = consoleHelper.readString();
 
-        messageHelper.writeInfoMessage("Введите полный путь к файлу");
+        consoleHelper.writeInfoMessage("Введите полный путь к файлу");
 
-        File file = new File(messageHelper.readString());
+        File file = new File(consoleHelper.readString());
 
         if (file.isFile()) {
             sendFileMessage(receiverName, file);
         } else {
-            messageHelper.writeErrorMessage("Такого файла не существует");
+            consoleHelper.writeErrorMessage("Такого файла не существует");
         }
     }
 
     public class ConsoleSocketThread extends Client.SocketThread {
+
+        @Override
+        protected void processIncomingMessage(String message) {
+            consoleHelper.writeTextMessage(message);
+        }
+
         @Override
         protected void processIncomingFileMessageForAll(Message fileMessageForAll) {
             synchronized (fileRequestLock) {
@@ -178,6 +208,28 @@ public class ConsoleClient extends Client{
         protected void processIncomingFileMessage(Message fileMessage) {
             synchronized (fileRequestLock) {
                 super.processIncomingFileMessage(fileMessage);
+            }
+        }
+
+        @Override
+        protected void informAboutAddingNewUser(String userName) {
+            writeInfoMessage("Участник с именем " + userName + " присоединился к чату");
+        }
+
+        @Override
+        protected void informAboutDeletingNewUser(String userName) {
+            closeAndRemoveAllReceiverStreamsFromInputStreamsMap(userName, true);
+            closeAndRemoveAllSenderStreamsFromOutputStreamsMap(userName, true);
+
+            writeInfoMessage("Участник с именем " + userName + " покинул чат");
+        }
+
+        @Override
+        protected void notifyConnectionStatusChanged(boolean clientConnected) {
+            ConsoleClient.this.clientConnected = clientConnected;
+
+            synchronized (ConsoleClient.this) {
+                ConsoleClient.this.notify();
             }
         }
     }

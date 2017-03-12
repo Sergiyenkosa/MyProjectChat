@@ -1,6 +1,6 @@
 package gui;
 
-import console.Client;
+import client.Client;
 
 import java.io.*;
 
@@ -13,6 +13,10 @@ public class ClientGuiController extends Client {
     private ClientGuiView view = new ClientGuiView(this);
     private String userName;
 
+    public static void main(String[] args) {
+        new ClientGuiController().run();
+    }
+
     @Override
     protected SocketThread getSocketThread() {
         return new GuiSocketThread();
@@ -20,7 +24,8 @@ public class ClientGuiController extends Client {
 
     @Override
     public void run() {
-        getSocketThread().run();
+        SocketThread socketThread = getSocketThread();
+        socketThread.run();
     }
 
     @Override
@@ -35,8 +40,22 @@ public class ClientGuiController extends Client {
 
     @Override
     protected String getUserName() {
-        userName = view.getUserName();
-        return userName;
+        return view.getUserName();
+    }
+
+    @Override
+    protected String getUserPassword() {
+        return view.getUserPassword();
+    }
+
+    @Override
+    protected void writeInfoMessage(String infoMessage) {
+        view.infoMessage(infoMessage);
+    }
+
+    @Override
+    protected void writeErrorMessage(String errorMessage) {
+        view.errorMessage(errorMessage);
     }
 
     @Override
@@ -55,10 +74,6 @@ public class ClientGuiController extends Client {
 
     public ClientGuiModel getModel() {
         return model;
-    }
-
-    public static void main(String[] args) {
-        new ClientGuiController().run();
     }
 
     //temporarily start
@@ -122,16 +137,6 @@ public class ClientGuiController extends Client {
             view.refreshMessages();
         }
 
-//        @Override
-//        protected void processPrivetMessage(String message) {
-//            if (message.startsWith("Server:")) {
-//                writeMessage(message);
-//            }
-//            else {
-//                processIncomingMessage("Приватное сообщение от " + message);
-//            }
-//        }
-
         @Override
         protected void informAboutAddingNewUser(String userName) {
             model.addUser(userName);
@@ -159,6 +164,8 @@ public class ClientGuiController extends Client {
 
         @Override
         protected void notifyConnectionStatusChanged(boolean clientConnected) {
+            ClientGuiController.this.clientConnected = clientConnected;
+
             view.notifyConnectionStatusChanged(clientConnected);
         }
     }

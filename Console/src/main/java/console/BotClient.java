@@ -1,5 +1,6 @@
 package console;
 
+
 import java.io.IOException;
 import java.text.SimpleDateFormat;
 import java.util.ArrayList;
@@ -50,7 +51,7 @@ public class BotClient extends ConsoleClient{
         new BotClient().run();
     }
 
-    public class BotSocketThread extends Client.SocketThread {
+    public class BotSocketThread extends ConsoleSocketThread {
         @Override
         protected void clientMainLoop() throws IOException, ClassNotFoundException {
             sendTextMessage("Привет чатику. Я бот. Понимаю команды: дата, день, месяц, год, время, час, минуты, секунды.");

@@ -197,6 +197,14 @@ public class ClientGuiView {
                 JOptionPane.QUESTION_MESSAGE);
     }
 
+    public String getUserPassword() {
+        return JOptionPane.showInputDialog(
+                frame,
+                "Введите ваш пароль:",
+                "Конфигурация клиента",
+                JOptionPane.QUESTION_MESSAGE);
+    }
+
     public void notifyConnectionStatusChanged(boolean clientConnected) {
         textField.setEditable(clientConnected);
         sendPrivateMessageButton.setEnabled(clientConnected);

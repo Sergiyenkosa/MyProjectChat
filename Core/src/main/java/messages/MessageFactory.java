@@ -13,10 +13,23 @@ public class MessageFactory {
         return message;
     }
 
+    public static Message getPasswordRequestMessage() {
+        Message message = new Message();
+        message.setType(PASSWORD_REQUEST);
+        return message;
+    }
+
     public static Message getUserNameMessage(String userName) {
         Message message = new Message();
         message.setType(USER_NAME);
         message.setData(userName);
+        return message;
+    }
+
+    public static Message getUserPasswordMessage(String userPassword) {
+        Message message = new Message();
+        message.setType(USER_PASSWORD);
+        message.setData(userPassword);
         return message;
     }
 
@@ -37,6 +50,13 @@ public class MessageFactory {
         Message message = new Message();
         message.setType(USER_REMOVED);
         message.setData(userName);
+        return message;
+    }
+
+    public static Message getInfoMessage(String infoMessage) {
+        Message message = new Message();
+        message.setType(INFO_MESSAGE);
+        message.setData(infoMessage);
         return message;
     }
 
@@ -163,15 +183,6 @@ public class MessageFactory {
         message.setReceiverName(fileMessage.getReceiverName());
         message.setSenderInputStreamId(fileMessage.getSenderInputStreamId());
         message.setReceiverOutputStreamId(FILE_CANCEL);
-        return message;
-    }
-
-    public static Message getFileTransferErrorRequestMessageFromServer(Message fileMessage) {
-        Message message = new Message();
-        message.setType(FILE_MESSAGE_REQUEST);
-        message.setSenderName(fileMessage.getSenderName());
-        message.setSenderInputStreamId(FILE_TRANSFER_ERROR);
-        message.setReceiverOutputStreamId(fileMessage.getReceiverOutputStreamId());
         return message;
     }
 }
