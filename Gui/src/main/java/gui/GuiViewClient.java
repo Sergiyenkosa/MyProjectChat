@@ -4,11 +4,13 @@ import javax.swing.*;
 import java.awt.*;
 import java.awt.event.*;
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.util.HashSet;
 import java.util.Set;
 
-public class ClientGuiView {
-    private final ClientGuiController controller;
+public class GuiViewClient {
+    private final GuiControllerClient controller;
 
     private JFrame frame = new JFrame("Чат");
     private JTextField textField = new JTextField(50);
@@ -19,7 +21,7 @@ public class ClientGuiView {
     private JButton sendFileButton = new JButton("Отправить файл");
     private JButton sendFileForAllButton = new JButton("Отправить файл для всех");
 
-    public ClientGuiView(ClientGuiController controller) {
+    public GuiViewClient(GuiControllerClient controller) {
         this.controller = controller;
         initView();
     }
@@ -88,7 +90,12 @@ public class ClientGuiView {
                 chooser.setAcceptAllFileFilterUsed(false);
 
                 if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION && chooser.getSelectedFile().isFile()) {
-                    controller.sendFileMessageForAll(chooser.getSelectedFile());
+                    File file = chooser.getSelectedFile();
+                    try {
+                        controller.sendFileMessageForAll(file.getName(), new FileInputStream(file));
+                    } catch (FileNotFoundException e1) {
+                        errorMessage("Такого файла не существует");
+                    }
                 }
             }
         });
@@ -112,8 +119,14 @@ public class ClientGuiView {
                             chooser.setAcceptAllFileFilterUsed(false);
 
                             if (chooser.showOpenDialog(dialog) == JFileChooser.APPROVE_OPTION && chooser.getSelectedFile().isFile()) {
-                                controller.sendFileMessage(receiverName, chooser.getSelectedFile());
-                                dialog.setVisible(false);
+                                File file = chooser.getSelectedFile();
+                                try {
+                                    controller.sendFileMessage(receiverName, file.getName(), new FileInputStream(file));
+                                    dialog.setVisible(false);
+                                } catch (FileNotFoundException e1) {
+                                    dialog.setVisible(false);
+                                    errorMessage("Такого файла не существует");
+                                }
                             }
                         }
                     }
@@ -259,18 +272,19 @@ public class ClientGuiView {
     }
 
     public void refreshMessages() {
-        messages.append(controller.getModel().getNewMessage() + "\n");
+        messages.setText(controller.getModel().getNewMessage() + "\n" + messages.getText());
     }
 
     public void refreshUsers() {
-        ClientGuiModel model = controller.getModel();
+        Set<String> usersSet = new HashSet<>(controller.getModel().getAllUserNames());
         StringBuilder sb = new StringBuilder();
-        for (String userName : model.getAllUserNames()) {
+
+        for (String userName : usersSet) {
             sb.append(userName).append("\n");
         }
+
         users.setText(sb.toString());
 
-        Set<String> usersSet = new HashSet<>(model.getAllUserNames());
         usersSet.remove(controller.getName());
 
         usersSelectList.setListData(usersSet.toArray(new String[usersSet.size()]));

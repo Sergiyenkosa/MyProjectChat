@@ -13,33 +13,35 @@
             <dependency>
                 <groupId>junit</groupId>
                 <artifactId>junit</artifactId>
-                <version>${junit-version}</version>
+                <version>${junit.version}</version>
                 <scope>test</scope>
             </dependency>
+
             <dependency>
                 <groupId>org.springframework</groupId>
                 <artifactId>spring-context</artifactId>
-                <version>${spring-version}</version>
+                <version>${spring.version}</version>
             </dependency>
             <dependency>
                 <groupId>org.springframework</groupId>
                 <artifactId>spring-context-support</artifactId>
-                <version>${spring-version}</version>
+                <version>${spring.version}</version>
             </dependency>
+
             <dependency>
                 <groupId>ua.skillsup.app</groupId>
                 <artifactId>web</artifactId>
-                <version>${veb-version}</version>
+                <version>${web.version}</version>
             </dependency>
             <dependency>
                 <groupId>ua.skillsup.app</groupId>
                 <artifactId>core</artifactId>
-                <version>${core-version}</version>
+                <version>${core.version}</version>
             </dependency>
             <dependency>
                 <groupId>ua.skillsup.app</groupId>
                 <artifactId>dao</artifactId>
-                <version>${dao-version}</version>
+                <version>${dao.version}</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -51,11 +53,11 @@
         <module>Console</module>
     </modules>
     <properties>
-        <junit-version>4.12</junit-version>
-        <spring-version>4.3.5.RELEASE</spring-version>
-        <veb-version>1.0-SNAPSHOT</veb-version>
-        <core-version>1.0-SNAPSHOT</core-version>
-        <dao-version>1.0-SNAPSHOT</dao-version>
+        <junit.version>4.12</junit.version>
+        <spring.version>4.3.5.RELEASE</spring.version>
+        <veb.version>1.0-SNAPSHOT</veb.version>
+        <core.version>1.0-SNAPSHOT</core.version>
+        <dao.version>1.0-SNAPSHOT</dao.version>
     </properties>
 
     <build>

@@ -2,7 +2,6 @@ package connection.impl;
 
 import connection.Connection;
 import messages.Message;
-import org.springframework.context.support.ClassPathXmlApplicationContext;
 
 import java.io.IOException;
 import java.io.ObjectInputStream;
@@ -42,6 +41,11 @@ public class ConnectionImpl implements Connection {
     @Override
     public SocketAddress getRemoteSocketAddress() {
         return socket.getRemoteSocketAddress();
+    }
+
+    @Override
+    public Socket getSocket() {
+        return socket;
     }
 
 

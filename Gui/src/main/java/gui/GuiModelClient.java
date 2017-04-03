@@ -7,21 +7,21 @@ import java.util.Set;
 /**
  * Created by s.sergienko on 19.10.2016.
  */
-public class ClientGuiModel {
-    private final Set<String> allUserNames = new HashSet<>();
+public class GuiModelClient {
+    private final Set<String> userNames = new HashSet<>();
     private String newMessage;
 
     public Set<String> getAllUserNames() {
-        return Collections.unmodifiableSet(allUserNames);
+        return Collections.unmodifiableSet(userNames);
     }
 
     public void addUser(String newUserName) {
-        allUserNames.add(newUserName);
+        userNames.add(newUserName);
     }
 
     public void deleteUser(String userName) {
-        if (allUserNames.contains(userName)) {
-            allUserNames.remove(userName);
+        if (userNames.contains(userName)) {
+            userNames.remove(userName);
         }
     }
 

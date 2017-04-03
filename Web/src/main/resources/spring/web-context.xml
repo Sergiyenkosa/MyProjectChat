@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd">
+
+    <bean id="socket" class="java.net.Socket" scope="prototype">
+        <constructor-arg index="0" type="java.lang.String" value="${socket-address}"/>
+        <constructor-arg index="1" type="int" value="${socket-port}"/>
+    </bean>
+
+    <bean id="connection" class="connection.impl.ConnectionImpl" scope="prototype">
+        <constructor-arg ref="socket"/>
+    </bean>
+
+    <bean class="org.springframework.beans.factory.config.PropertyPlaceholderConfigurer">
+        <property name="locations" value="classpath:properties/*"/>
+        <property name="ignoreResourceNotFound" value="true"/>
+    </bean>
+</beans>

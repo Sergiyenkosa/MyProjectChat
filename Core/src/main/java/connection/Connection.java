@@ -4,6 +4,7 @@ import messages.Message;
 
 import java.io.Closeable;
 import java.io.IOException;
+import java.net.Socket;
 import java.net.SocketAddress;
 
 /**
@@ -15,4 +16,6 @@ public interface Connection extends Closeable {
     Message receive() throws IOException, ClassNotFoundException;
 
     SocketAddress getRemoteSocketAddress();
+
+    Socket getSocket();
 }

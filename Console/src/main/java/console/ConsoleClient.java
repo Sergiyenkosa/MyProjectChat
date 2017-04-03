@@ -6,6 +6,8 @@ import messagehalper.impl.ConsoleHelperImpl;
 import messages.Message;
 
 import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 
 /**
  * Created by s.sergienko on 06.03.2017.
@@ -23,13 +25,8 @@ public class ConsoleClient extends Client {
     }
 
     @Override
-    protected SocketThread getSocketThread() {
-        return new ConsoleSocketThread();
-    }
-
-    @Override
     public void run() {
-        SocketThread socketThread = getSocketThread();
+        SocketThread socketThread = new ConsoleSocketThread();
         socketThread.setDaemon(true);
         socketThread.start();
 
@@ -37,7 +34,7 @@ public class ConsoleClient extends Client {
             try {
                 wait();
 
-                if (clientConnected) {
+                if (isClientConnected()) {
                     consoleHelper.writeInfoMessage("Соединение установлено. Для выхода наберите команду 'exit'," +
                             " наберите 'pm' для отправки приватного сообщения," +
                             " наберите fm для отправки файла одному из пользывателей," +
@@ -48,7 +45,7 @@ public class ConsoleClient extends Client {
                     consoleHelper.writeErrorMessage("Произошла ошибка во время работы клиента.");
                 }
             } catch (InterruptedException e) {
-                clientConnected = false;
+                setClientConnected(false);
             }
         }
     }
@@ -126,7 +123,7 @@ public class ConsoleClient extends Client {
 
     private void runConsoleInputMessagesHandler() throws InterruptedException {
         while (true) {
-            if (clientConnected) {
+            if (isClientConnected()) {
                 synchronized (fileRequestLock) {
                     String s = consoleHelper.readString();
                     if (s.equals("exit")) {
@@ -171,7 +168,13 @@ public class ConsoleClient extends Client {
     private void createFileMessageForAll() {
         consoleHelper.writeInfoMessage("Введите полный путь к файлу, файл не должен превышать 10 мегобайт");
 
-        sendFileMessageForAll(new File(consoleHelper.readString()));
+        File file = new File(consoleHelper.readString());
+
+        try {
+            sendFileMessageForAll(file.getName(), new FileInputStream(file));
+        } catch (FileNotFoundException e) {
+            writeErrorMessage("Такого файла не существует");
+        }
     }
 
     private void createFileMessage() {
@@ -183,10 +186,10 @@ public class ConsoleClient extends Client {
 
         File file = new File(consoleHelper.readString());
 
-        if (file.isFile()) {
-            sendFileMessage(receiverName, file);
-        } else {
-            consoleHelper.writeErrorMessage("Такого файла не существует");
+        try {
+            sendFileMessage(receiverName, file.getName(), new FileInputStream(file));
+        } catch (FileNotFoundException e) {
+            writeErrorMessage("Такого файла не существует");
         }
     }
 
@@ -226,7 +229,7 @@ public class ConsoleClient extends Client {
 
         @Override
         protected void notifyConnectionStatusChanged(boolean clientConnected) {
-            ConsoleClient.this.clientConnected = clientConnected;
+            ConsoleClient.this.setClientConnected(clientConnected);
 
             synchronized (ConsoleClient.this) {
                 ConsoleClient.this.notify();

@@ -18,6 +18,7 @@ import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
 import static messages.Message.*;
+import static messages.Message.MessageType.*;
 
 /**
  * Created by s.sergienko on 11.10.2016.
@@ -131,20 +132,26 @@ public class Server {
         }
     }
 
-    public void sendFileMessageRequest(Connection connection, Message message) throws IOException {
+    public void sendFileMessageRequest(Message message) throws IOException {
         try {
-            connectionMap.get(message.getReceiverName()).send(message);
+            Connection receiverConnection = connectionMap.get(message.getReceiverName());
+            receiverConnection.send(message);
+
+            if (message.getSenderInputStreamId() == FILE_TRANSFER_ERROR) {
+                String errorMessage = String.format("У пользователя: %s произошла ошибка чтения файла: %s",
+                        message.getSenderName(), message.getData());
+
+                receiverConnection.send(MessageFactory.getErrorMessage(errorMessage));
+            }
         } catch (IOException | NullPointerException e) {
             log.error(e);
         }
     }
 
-    public void sendFileMessageResponse(Connection connection, Message message) throws IOException {
-        int receiverFileId = message.getReceiverOutputStreamId();
-
+    public void sendFileMessageResponse(Message message) throws IOException {
         try {
+            int receiverFileId = message.getReceiverOutputStreamId();
             Connection senderConnection = connectionMap.get(message.getSenderName());
-            senderConnection.send(message);
 
             if (receiverFileId == FILE_IS_DOWNLOADED) {
                 String infoMessage = String.format("Пользователь: %s получил файл: %s"
@@ -153,10 +160,10 @@ public class Server {
             } else if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR) {
                 senderConnection.send(message);
 
-                String cause = receiverFileId == Message.FILE_CANCEL
-                        ? "Пользователь: %s отказался принять файл"
-                        : "У пользователя: %s произошла ошибка сохранения файла";
-                String errorMessage = String.format(cause + ": %s.",
+                String cause = receiverFileId == Message.FILE_CANCEL ?
+                        "Пользователь: %s отказался принять файл: %s" :
+                        "У пользователя: %s произошла ошибка записи файла: %s";
+                String errorMessage = String.format(cause,
                         message.getReceiverName(), message.getData());
                 senderConnection.send(MessageFactory.getErrorMessage(errorMessage));
             } else {
@@ -174,46 +181,35 @@ public class Server {
             this.socket = socket;
         }
 
-        public String serverHandshake(Connection connection) throws IOException, ClassNotFoundException {
+        private String serverHandshake(Connection connection) throws IOException, ClassNotFoundException {
             while (true) {
-                connection.send(MessageFactory.getNameRequestMessage());
+                connection.send(MessageFactory.getCredentialsRequestMessage());
 
                 Message message = connection.receive();
-                switch (message.getType()) {
-                    case USER_NAME:
-                        String name = message.getData();
-                        UserDao userDao;
 
-                        if (connectionMap.containsKey(name)) {
-                            String errorMessage = "Пользователь с таким именем уже подключен к чату.";
-                            connection.send(MessageFactory.getErrorMessage(errorMessage));
-                            break;
-                        } else if ((userDao = storageDao.findByLogin(name)) != null) {
-                            connection.send(MessageFactory.getPasswordRequestMessage());
+                if (message.getType() == USER_CREDENTIALS) {
+                    UserDao userDao;
 
-                            message = connection.receive();
-                            if (message.getType() == MessageType.USER_PASSWORD) {
-                                if (message.getData().equals(userDao.getPassword())) {
-                                    connectionMap.put(name, connection);
+                    if ((userDao = storageDao.findByLogin(message.getSenderName())) == null) {
+                        String errorMessage = "Wrong name, please try again :)";
+                        connection.send(MessageFactory.getErrorMessage(errorMessage));
+                    } else if(!userDao.getPassword().equals(message.getData())){
+                        String errorMessage = "Wrong password, please try again :)";
+                        connection.send(MessageFactory.getErrorMessage(errorMessage));
+                    } else if (!connectionMap.containsKey(userDao.getLogin())) {
+                        connectionMap.put(userDao.getLogin(), connection);
 
-                                    connection.send(MessageFactory.getNameAcceptedMessage());
+                        connection.send(MessageFactory.getUserAcceptedMessage());
 
-                                    return name;
-                                } else {
-                                    String errorMessage = "Ошибка, неверный пароль";
-                                    connection.send(MessageFactory.getErrorMessage(errorMessage));
-                                    break;
-                                }
-                            }
-                        } else {
-                            String errorMessage = "Ошибка, такого пользователя не существует в базе данных";
-                            connection.send(MessageFactory.getErrorMessage(errorMessage));
-                            break;
-                        }
-                    default:
-                        log.error("Ошибка формата сообщения: " + message.getType());
+                        return userDao.getLogin();
+                    } else {
+                        String errorMessage = "The user is already connected :(";
+                        connection.send(MessageFactory.getErrorMessage(errorMessage));
+                    }
+                } else {
+                    log.error("Unknown message type: " + message.getType());
 
-                        throw new IOException();
+                    throw new IOException();
                 }
             }
         }
@@ -227,46 +223,37 @@ public class Server {
         }
 
         public void serverMainLoop(Connection connection, String userName)
-                throws IOException, ClassNotFoundException {
+                throws IOException, ClassNotFoundException, InterruptedException {
             while (true) {
                 Message message = connection.receive();
+                MessageType type = message.getType();
 
-                try {
-                    Thread.sleep(100);
-                } catch (InterruptedException e) {
-                    log.error(e);
+                if (type == TEXT_MESSAGE) {
+                    if (isMessageTextCorrect(connection, message)) {
+                        sendBroadcastMessage(MessageFactory
+                                .getTextMessage(userName + ": " + message.getData()));
+                    }
+                } else if (type == PRIVATE_MESSAGE) {
+                    if (isMessageTextCorrect(connection, message)) {
+                        message.setSenderName(userName);
+                        sendPrivateMessage(connection, message);
+                    }
+                } else if (type == FILE_MESSAGE_REQUEST) {
+                    sendFileMessageRequest(message);
+                } else if (type == FILE_MESSAGE_RESPONSE) {
+                    sendFileMessageResponse(message);
+                } else if (type == FILE_MESSAGE) {
+                    message.setSenderName(userName);
+                    sendFileMessage(connection, message);
+                } else if (type == FILE_MESSAGE_FOR_ALL) {
+                    message.setSenderName(userName);
+                    sendFileMessageForAll(message);
+                } else {
+                    log.error("Message type error: " + type);
+                    break;
                 }
 
-                switch (message.getType()) {
-                    case TEXT_MESSAGE:
-                        if (isMessageTextCorrect(connection, message)) {
-                            sendBroadcastMessage(MessageFactory
-                                    .getTextMessage(userName + ": " + message.getData()));
-                        }
-                        break;
-                    case PRIVATE_MESSAGE:
-                        if (isMessageTextCorrect(connection, message)) {
-                            message.setSenderName(userName);
-                            sendPrivateMessage(connection, message);
-                        }
-                        break;
-                    case FILE_MESSAGE_REQUEST:
-                        sendFileMessageRequest(connection, message);
-                        break;
-                    case FILE_MESSAGE_RESPONSE:
-                        sendFileMessageResponse(connection, message);
-                        break;
-                    case FILE_MESSAGE:
-                        message.setSenderName(userName);
-                        sendFileMessage(connection, message);
-                        break;
-                    case FILE_MESSAGE_FOR_ALL:
-                        message.setSenderName(userName);
-                        sendFileMessageForAll(message);
-                        break;
-                    default:
-                        log.error("Ошибка формата сообщения: " + message.getType());
-                }
+                Thread.sleep(5);
             }
         }
 
@@ -277,14 +264,15 @@ public class Server {
 
             String userName = "";
 
-            try (ConnectionImpl connection = new ConnectionImpl(socket)){//ask about closable
-                userName = serverHandshake(connection);
-                sendBroadcastMessage(MessageFactory.getUserAddedMessage(userName));
+            try (ConnectionImpl connection = new ConnectionImpl(socket)){
+                if (!(userName = serverHandshake(connection)).equals("")) {
+                    sendBroadcastMessage(MessageFactory.getUserAddedMessage(userName));
 
-                sendListOfUsers(connection);
+                    sendListOfUsers(connection);
 
-                serverMainLoop(connection, userName);
-            } catch (IOException | ClassNotFoundException e) {
+                    serverMainLoop(connection, userName);
+                }
+            } catch (Exception e) {
                 log.error("Произошла ошибка при обмене данными с удаленным адресом: "
                         + socket.getRemoteSocketAddress(), e);
             }

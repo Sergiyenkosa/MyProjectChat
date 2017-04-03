@@ -7,35 +7,24 @@ import static messages.Message.MessageType.*;
  * Created by s.sergienko on 01.03.2017.
  */
 public class MessageFactory {
-    public static Message getNameRequestMessage() {
+    public static Message getCredentialsRequestMessage() {
         Message message = new Message();
-        message.setType(NAME_REQUEST);
+        message.setType(CREDENTIALS_REQUEST);
         return message;
     }
 
-    public static Message getPasswordRequestMessage() {
-        Message message = new Message();
-        message.setType(PASSWORD_REQUEST);
-        return message;
-    }
+        public static Message getCredentialsMessage(String userName, String userPassword) {
 
-    public static Message getUserNameMessage(String userName) {
         Message message = new Message();
-        message.setType(USER_NAME);
-        message.setData(userName);
-        return message;
-    }
-
-    public static Message getUserPasswordMessage(String userPassword) {
-        Message message = new Message();
-        message.setType(USER_PASSWORD);
+        message.setType(USER_CREDENTIALS);
         message.setData(userPassword);
+        message.setSenderName(userName);
         return message;
     }
 
-    public static Message getNameAcceptedMessage() {
+    public static Message getUserAcceptedMessage() {
         Message message = new Message();
-        message.setType(NAME_ACCEPTED);
+        message.setType(USER_ACCEPTED);
         return message;
     }
 
@@ -162,6 +151,17 @@ public class MessageFactory {
         message.setReceiverName(fileMessage.getReceiverName());
         message.setSenderInputStreamId(fileMessage.getSenderInputStreamId());
         message.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
+        return message;
+    }
+
+    public static Message getFileTransferErrorRequestMessageFromClient(Message fileMessage) {
+        Message message = new Message();
+        message.setType(FILE_MESSAGE_REQUEST);
+        message.setData(fileMessage.getData());
+        message.setSenderName(fileMessage.getSenderName());
+        message.setReceiverName(fileMessage.getReceiverName());
+        message.setSenderInputStreamId(FILE_TRANSFER_ERROR);
+        message.setReceiverOutputStreamId(fileMessage.getReceiverOutputStreamId());
         return message;
     }
 
