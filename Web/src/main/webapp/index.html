@@ -8,7 +8,7 @@
         <script src="webjars/bootstrap/3.2.0/js/bootstrap.min.js"></script>
         <script src="resources/chat.js"></script>
     </head>
-    <body onload="connect();" onunload="disconnect();">
+    <body id="body" onload="connect();" onunload="disconnect();">
         <h1> Chat </h1>
 
         <div class="modal fade" id="login_modal" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
@@ -21,32 +21,6 @@
                         <input id="name" type="text" name="name" placeholder="Username">
                         <input id="password" type="password" name="pass" placeholder="Password">
                         <input id="login" type="button" name="login" class="chatmodal-submit hidden" value="Sign in">
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="modal fade" id="error_modal" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
-             aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
-            <div class="modal-dialog">
-                <div class="chatmodal-container">
-                    <h2>Error</h2><br>
-                    <form>
-                        <p id="message_error" class="text-centred bg-danger"></p>
-                        <input id="error_ok" type="button" class="chatmodal-submit" value="ok">
-                    </form>
-                </div>
-            </div>
-        </div>
-
-        <div class="modal fade" id="info_modal" data-backdrop="static" data-keyboard="false" tabindex="-1" role="dialog"
-             aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
-            <div class="modal-dialog">
-                <div class="chatmodal-container">
-                    <h2>Info</h2><br>
-                    <form>
-                        <p id="message_info" class="text-centred bg-danger"></p>
-                        <input id="info_ok" type="button" class="chatmodal-submit bg-success" value="ok">
                     </form>
                 </div>
             </div>
@@ -70,11 +44,58 @@
              aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
             <div class="modal-dialog">
                 <div class="chatmodal-container">
-                    <h2>Type message</h2><br>
+                    <h2>Private message</h2><br>
                     <form>
                         <input id="pm_input" type="text" placeholder="Private message" >
 
                         <input id="pm_send" type="button" class="chatmodal-submit bg-success" value="ok">
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="user_fm_modal" tabindex="-1" role="dialog"
+             aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog">
+                <div class="chatmodal-container">
+                    <h2>Select User</h2><br>
+                    <form>
+                        <select id="my_fm_select"></select>
+
+                        <input id="user_fm_ok" type="button" class="chatmodal-submit bg-success" value="ok">
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="fm_modal" tabindex="-1" role="dialog"
+             aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog">
+                <div class="chatmodal-container">
+                    <h2>File message</h2><br>
+                    <form>
+                        <input id="file_input" type="file"/>
+                        <input id="file_choose" type="button" class="chatmodal-submit bg-success" value="choose file">
+
+                        <input id="fm_send" type="button" class="chatmodal-submit bg-success" value="send file">
+
+                        <div id="byte_range"></div>
+                        <div id="byte_content"></div>
+                    </form>
+                </div>
+            </div>
+        </div>
+
+        <div class="modal fade" id="fma_modal" tabindex="-1" role="dialog"
+             aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;">
+            <div class="modal-dialog">
+                <div class="chatmodal-container">
+                    <h2>File message for all</h2><br>
+                    <form>
+                        <input id="file_all_input" type="file"/>
+                        <input id="file_all_choose" type="button" class="chatmodal-submit bg-success" value="choose file">
+
+                        <input id="fma_send" type="button" class="chatmodal-submit bg-success" value="send file">
                     </form>
                 </div>
             </div>

@@ -179,6 +179,7 @@ public class MessageFactory {
     public static Message getFileCancelResponseMessage(Message fileMessage) {
         Message message = new Message();
         message.setType(FILE_MESSAGE_RESPONSE);
+        message.setData(fileMessage.getData());
         message.setSenderName(fileMessage.getSenderName());
         message.setReceiverName(fileMessage.getReceiverName());
         message.setSenderInputStreamId(fileMessage.getSenderInputStreamId());

@@ -95,7 +95,7 @@ public abstract class Client{
                 }
             }
         } catch (IOException e) {
-            writeErrorMessage("Error reading file");
+            writeErrorMessage("File reading error");
         }
     }
 

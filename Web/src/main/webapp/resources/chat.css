@@ -58,6 +58,25 @@
     box-sizing: border-box;
 }
 
+#my_fm_select {
+    height: 44px;
+    font-size: 16px;
+    width: 100%;
+    margin-bottom: 10px;
+    border: 1px solid #d9d9d9;
+    border-top: 1px solid #c0c0c0;
+    padding: 0 8px;
+    box-sizing: border-box;
+}
+
+#file_input {
+    display: none
+}
+
+#file_all_input {
+    display: none
+}
+
 .chatmodal {
     text-align: center;
     font-size: 14px;
@@ -133,6 +152,7 @@ html, body {
 #messages {
     width: 70%;
 }
+
 .user_block {
     width: 30%;
 }
