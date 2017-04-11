@@ -1,84 +1,78 @@
 // Websocket Endpoint url
-var host = window.location.host;
-var path = window.location.pathname;
-var webCtx = path.substring(0, path.indexOf('/', 1));
-var endPointURL = "ws://" + window.location.host + webCtx + "/chat";
+const host = window.location.host;
+const path = window.location.pathname;
+const webCtx = path.substring(0, path.indexOf('/', 1));
+const endPointURL = "ws://" + window.location.host + webCtx + "/chat";
 
-var chatClient = null;
+let chatClient = null;
 
 function connect () {
     chatClient = new WebSocket(endPointURL);
-    var thisUserName;
-    var allUserNamesSet = new Set();
-    var id = 0;
+    let thisUserName;
+    const allUserNamesSet = new Set();
+    let id = 0;
+    let receiverName;
+    const filesMap = new Map();
 
     function getId() {
         id = id + 1;
         return id;
     }
 
-    var loginModal = $("#login_modal").modal();
+    const loginModal = $("#login_modal").modal();
 
     chatClient.onmessage = function (event) {
-        var jsonObj = JSON.parse(event.data);
+        const jsonObj = JSON.parse(event.data);
 
         if (jsonObj.type === "CREDENTIALS_REQUEST") {
             login.removeClass("hidden");
         } else if (jsonObj.type === "USER_ACCEPTED") {
             loginModal.modal("hide");
         } else if (jsonObj.type === "TEXT_MESSAGE") {
-            addMessage(jsonObj.data)
+            addMessage(jsonObj.data);
         } else if (jsonObj.type === "ERROR_MESSAGE") {
             if (loginModal.hasClass("in")) {
                 displayUserCredentialsError(jsonObj.data);
             } else {
-                displayError(jsonObj.data)
+                displayError(jsonObj.data);
             }
         } else if (jsonObj.type === "INFO_MESSAGE") {
-            displayInfo(jsonObj.data)
+            displayInfo(jsonObj.data);
         } else if (jsonObj.type === "USER_ADDED") {
-            allUserNamesSet.add(jsonObj.data);
-            let users = "";
-
-            for (let userName of allUserNamesSet) {
-                users = (users + userName + "\r\n");
-            }
-
-            $("#users").val(users);
-
-            addMessage("User " + jsonObj.data + " joined the chat.");
+            addUser(jsonObj.data);
         } else if (jsonObj.type === "USER_REMOVED") {
-            allUserNamesSet.delete(jsonObj.data);
-            let users = "";
-
-            for (let userName of allUserNamesSet) {
-                users = (users + userName + "\r\n");
-            }
-
-            $("#users").val(users);
-
-            addMessage("User " + jsonObj.data + " left the chat");
+            removeUser(jsonObj.data);
+        } else if (jsonObj.type === "FILE_MESSAGE_FOR_ALL") {
+            askFileAllMessage(jsonObj);
         }
     };
 
-    var login = $("#login").click(function () {
+    function sendMessage(type, data, senderName, receiverName, bytes, senderInputStreamId, receiverOutputStreamId) {
+        const jsonObj = {
+            "type": type, "data": data, "senderName": senderName, "receiverName": receiverName,
+            "bytes": bytes, "senderInputStreamId": senderInputStreamId, "receiverOutputStreamId": receiverOutputStreamId
+        };
+        chatClient.send(JSON.stringify(jsonObj));
+    }
+
+    const login = $("#login").click(function () {
         login.addClass("hidden");
         thisUserName = $("#name").val();
         sendMessage("USER_CREDENTIALS", $("#password").val(), thisUserName)
     });
 
     function displayUserCredentialsError(message) {
-        var field = $("#credentials_error");
+        const field = $("#credentials_error");
         field.text(message);
     }
 
     function addMessage(message) {
-        var messagesArea = $("#messages");
+        const messagesArea = $("#messages");
         messagesArea.val(message + "\r\n" + messagesArea.val());
         messagesArea.scrollTop = messagesArea.scrollHeight;
     }
 
-    var textMessage = $("#message_input");
+    const textMessage = $("#message_input");
 
     textMessage.keydown(function (event) {
         if (event.keyCode === 13) {
@@ -88,13 +82,14 @@ function connect () {
     });
 
     $("#messageSend").click(function () {
+        a();
         sendMessage("TEXT_MESSAGE", textMessage.val());
         textMessage.val("");
         textMessage.focus();
     });
 
     function displayError(message) {
-        var id = getId();
+        const id = getId();
 
         $("#body").append(
             '<div class="modal" id="error_modal_' + id + '" data-backdrop="static" data-keyboard="false" \n' +
@@ -112,7 +107,7 @@ function connect () {
 
         $("#message_error_" + id).text(message);
 
-        var modal = $("#error_modal_" + id);
+        const modal = $("#error_modal_" + id);
 
         $("#error_ok_" + id).click(function () {
             modal.modal('hide');
@@ -123,7 +118,7 @@ function connect () {
     }
 
     function displayInfo(message) {
-        var id = getId();
+        const id = getId();
 
         $("#body").append(
             '<div class="modal" id="info_modal_' + id + '" data-backdrop="static" data-keyboard="false" \n' +
@@ -141,7 +136,7 @@ function connect () {
 
         $("#message_info_" + id).text(message);
 
-        var modal = $("#info_modal_" + id);
+        const modal = $("#info_modal_" + id);
 
         $("#info_ok_" + id).click(function () {
             modal.modal('hide');
@@ -151,12 +146,38 @@ function connect () {
         modal.modal();
     }
 
+    function addUser(userName) {
+        allUserNamesSet.add(userName);
+        let users = "";
+
+        for (let userName of allUserNamesSet) {
+            users = (users + userName + "\r\n");
+        }
+
+        $("#users").val(users);
+
+        addMessage("User " + userName + " joined the chat.");
+    }
+
+    function removeUser(userName) {
+        allUserNamesSet.delete(userName);
+        let users = "";
+
+        for (let userName of allUserNamesSet) {
+            users = (users + userName + "\r\n");
+        }
+
+        $("#users").val(users);
+
+        addMessage("User " + userName + " left the chat");
+    }
+
     $("#private_message").click(function () {
         userPMSelect();
     });
 
     function userPMSelect() {
-        var usersSelect = $("#my_pm_select");
+        const usersSelect = $("#my_pm_select");
         usersSelect.empty();
 
         for (let userName of allUserNamesSet) {
@@ -168,8 +189,6 @@ function connect () {
         $("#user_pm_modal").modal();
     }
 
-    var receiverName;
-
     $("#user_pm_ok").click(function () {
         $("#user_pm_modal").modal("hide");
         receiverName = $("#my_pm_select").find(":selected").attr('value');
@@ -179,10 +198,10 @@ function connect () {
     });
 
     $("#pm_send").click(function () {
-        var privateMessage = $("#pm_input").val();
+        const privateMessage = $("#pm_input");
         $("#pm_modal").modal("hide");
-        sendMessage("PRIVATE_MESSAGE", privateMessage, null, receiverName);
-        $("#pm_input").val("");
+        sendMessage("PRIVATE_MESSAGE", privateMessage.val(), null, receiverName);
+        privateMessage.val("");
     });
 
     $("#file_message").click(function () {
@@ -190,7 +209,7 @@ function connect () {
     });
 
     function userFMSelect() {
-        var usersSelect = $("#my_fm_select");
+        const usersSelect = $("#my_fm_select");
         usersSelect.empty();
 
         for (let userName of allUserNamesSet) {
@@ -216,24 +235,22 @@ function connect () {
         $("#file_input").trigger( 'click' );
     } );
 
-    var map = new Map();
-
     $("#fm_send").click(function () {
-        var files = document.getElementById('file_input').files;
+        const files = document.getElementById('file_input').files;
 
         if (!files.length) {
             displayError('Please select a file!');
             return;
         }
 
-        var file = files[0];
+        const file = files[0];
 
-        var id = getId();
+        const id = getId();
 
-        if (map.has(receiverName)) {
-            map.get(receiverName).set(id, [file, 0]);
+        if (filesMap.has(receiverName)) {
+            filesMap.get(receiverName).set(id, [file, 0]);
         } else {
-            map.set(receiverName, new Map().set(id, [file, 0]));
+            filesMap.set(receiverName, new Map().set(id, [file, 0]));
         }
 
         sendMessage("FILE_MESSAGE", file.name, null, receiverName, null, id);
@@ -298,14 +315,14 @@ function connect () {
     } );
 
     $("#fma_send").click(function () {
-        var files = document.getElementById('file_all_input').files;
+        const files = document.getElementById('file_all_input').files;
 
         if (!files.length) {
             displayError('Please select a file!');
             return;
         }
 
-        var file = files[0];
+        const file = files[0];
 
         if (file.size > 1024*1024*10) {
             displayError("File must not exceed 10mb");
@@ -313,7 +330,7 @@ function connect () {
             return;
         }
 
-        var promise = new Promise(getBuffer);
+        const promise = new Promise(getBuffer);
 
         promise.then(function(data) {
             sendMessage("FILE_MESSAGE_FOR_ALL", file.name, null, null, Array.from(data));
@@ -324,34 +341,67 @@ function connect () {
         });
 
         function getBuffer(resolve) {
-            var reader = new FileReader();
+            const reader = new FileReader();
             reader.readAsArrayBuffer(new Blob([file]));
             reader.onload = function() {
-                var arrayBuffer = reader.result;
-                var bytes = new Uint8Array(arrayBuffer);
+                const arrayBuffer = reader.result;
+                const bytes = new Uint8Array(arrayBuffer);
                 resolve(bytes);
             }
         }
     });
+
+    function askFileAllMessage(message) {
+        const id = getId();
+
+        $("#body").append(
+            '<div class="modal" id="ask_all_file_modal_' + id + '" data-backdrop="static" data-keyboard="false" \n' +
+            'tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;"> \n' +
+            '<div class="modal-dialog"> \n' +
+            '<div class="chatmodal-container"> \n' +
+            '<h2>File Message</h2><br> \n' +
+            '<form> \n' +
+            '<p id="message_all_file_' + id + '" class="text-centred bg-danger"></p> \n' +
+            '<input id="download_all_file_' + id + '" type="button" class="chatmodal-submit bg-success" value="yes">' +
+            '<input id="deny_all_file_' + id + '" type="button" class="chatmodal-submit bg-success" value="no">' +
+            '</form> \n' +
+            '</div> \n' +
+            '</div> \n' +
+            '</div>');
+
+        $("#message_all_file_" + id).text("User " + message.senderName + " send file " + message.data + " for you" +
+        "download the file?");
+
+        const modal = $("#ask_all_file_modal_" + id);
+
+        $("#download_all_file_" + id).click(function () {
+            modal.modal('hide');
+            modal.remove();
+
+            const fileStream = streamSaver.createWriteStream(message.data);
+            const writer = fileStream.getWriter();
+            writer.write(new Uint8Array(message.bytes));
+            writer.close();
+        });
+
+        $("#deny_all_file_" + id).click(function () {
+            modal.modal('hide');
+            modal.remove();
+        });
+
+        modal.modal();
+    }
 }
 
 function disconnect () {
     chatClient.close();
 }
 
-function sendMessage(type, data, senderName, receiverName, bytes, senderInputStreamId, receiverOutputStreamId) {
-    var jsonObj = {
-        "type": type, "data": data, "senderName": senderName, "receiverName": receiverName,
-        "bytes": bytes, "senderInputStreamId": senderInputStreamId, "receiverOutputStreamId": receiverOutputStreamId
-    };
-    chatClient.send(JSON.stringify(jsonObj));
-}
-
 $(document).ready(function(){
     function heightFunction() {
-        var myHeat = $(window).height();
-        var leftColon = myHeat - 155;
-        var RightColon = myHeat - 327;
+        const myHeat = $(window).height();
+        const leftColon = myHeat - 155;
+        const RightColon = myHeat - 327;
         $('#messages').css({"height": leftColon});
         $('#users').css({"height": RightColon});
     }
