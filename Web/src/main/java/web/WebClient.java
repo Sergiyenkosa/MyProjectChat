@@ -3,57 +3,81 @@ package web;
 import com.google.gson.Gson;
 import connection.Connection;
 import messages.Message;
-import messages.MessageFactory;
+import org.springframework.context.ApplicationContext;
+import org.springframework.context.support.ClassPathXmlApplicationContext;
 
-import javax.websocket.MessageHandler;
+import javax.websocket.OnClose;
+import javax.websocket.OnMessage;
+import javax.websocket.OnOpen;
 import javax.websocket.Session;
+import javax.websocket.server.ServerEndpoint;
 import java.io.IOException;
+import java.net.Socket;
 
 /**
  * Created by s.sergienko on 15.03.2017.
  */
-public class WebClient extends Thread implements MessageHandler.Whole<String>{
-    private final Connection  connection;
-    private final Session webSocketSession;
+@ServerEndpoint(value="/chat")
+public class WebClient {
+    private volatile boolean clientConnected = false;
+    private Connection  connection;
+    private Session userSession;
+    private final Gson gson = new Gson();
 
-    public WebClient(Connection connection, Session webSocketSession) {
-        this.connection = connection;
-        this.webSocketSession = webSocketSession;
+    @OnOpen
+    public void onOpen(Session userSession) throws IOException, ClassNotFoundException {
+        ApplicationContext context
+                = new ClassPathXmlApplicationContext("spring/web-context.xml");
+        this.connection = (Connection) context.getBean("connection");
+
+        this.userSession = userSession;
+
+        clientConnected = true;
+
+        new WebClientThread().start();
     }
 
-    public Connection getConnection() {
-        return connection;
+    @OnClose
+    public void onClose(Session userSession) {
+        clientConnected = false;
+
+        try (Socket socket = connection.getSocket()){
+            socket.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
     }
 
-    public void run() {
-        while (!isInterrupted()) {
+    @OnMessage
+    public void onMessage(String s, Session userSession) {
+        try {
+            Message message = gson.fromJson(s, Message.class);
+
+            connection.send(message);
+        } catch (IOException e) {
+            Message message = new Message();
+            message.setType(Message.MessageType.ERROR_MESSAGE);
+            message.setData("Server is temporarily unavailable");
+
             try {
-                Message message = connection.receive();
-                System.out.println(message.getType());
-
-                webSocketSession.getBasicRemote().sendText(new Gson().toJson(message));
-            } catch (IOException | ClassNotFoundException e) {
-                break;
+                userSession.getBasicRemote().sendText(gson.toJson(message));
+            } catch (IOException e1) {
+                e1.printStackTrace();
             }
         }
     }
 
-    @Override
-    public void onMessage(String s) {
-        try {
-            System.out.println(s);
+    private class WebClientThread extends Thread {
+        public void run() {
+            while (clientConnected) {
+                try {
+                    Message message = connection.receive();
 
-            Message message = new Gson().fromJson(s, Message.class);
-
-            System.out.println(message.getType());
-
-            connection.send(message);
-        } catch (IOException e) {
-            try (Session session = webSocketSession){
-                session.getBasicRemote().sendText(new Gson().toJson(
-                        MessageFactory.getErrorMessage("Server is temporarily unavailable")));
-            } catch (IOException e1) {
-                e1.printStackTrace();
+                    userSession.getBasicRemote().sendText(gson.toJson(message));
+                    userSession.getBasicRemote().flushBatch();
+                } catch (IOException | ClassNotFoundException e) {
+                    break;
+                }
             }
         }
     }

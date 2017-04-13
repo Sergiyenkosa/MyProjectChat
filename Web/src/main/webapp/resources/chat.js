@@ -2,7 +2,7 @@
 const host = window.location.host;
 const path = window.location.pathname;
 const webCtx = path.substring(0, path.indexOf('/', 1));
-const endPointURL = "ws://" + window.location.host + webCtx + "/chat";
+const endPointURL = "ws://" + host + webCtx + "/chat";
 
 let chatClient = null;
 
@@ -12,7 +12,8 @@ function connect () {
     const allUserNamesSet = new Set();
     let id = 0;
     let receiverName;
-    const filesMap = new Map();
+    const outputFilesMap = new Map();
+    const inputFilesMap = new Map();
 
     function getId() {
         id = id + 1;
@@ -21,29 +22,40 @@ function connect () {
 
     const loginModal = $("#login_modal").modal();
 
+    chatClient.onerror = function(ev) {
+        alert('Error '+ev.data);
+    };
+
     chatClient.onmessage = function (event) {
         const jsonObj = JSON.parse(event.data);
+        const type = jsonObj.type;
 
-        if (jsonObj.type === "CREDENTIALS_REQUEST") {
+        if (type === "CREDENTIALS_REQUEST") {
             login.removeClass("hidden");
-        } else if (jsonObj.type === "USER_ACCEPTED") {
+        } else if (type === "USER_ACCEPTED") {
             loginModal.modal("hide");
-        } else if (jsonObj.type === "TEXT_MESSAGE") {
+        } else if (type === "TEXT_MESSAGE") {
             addMessage(jsonObj.data);
-        } else if (jsonObj.type === "ERROR_MESSAGE") {
+        } else if (type === "ERROR_MESSAGE") {
             if (loginModal.hasClass("in")) {
                 displayUserCredentialsError(jsonObj.data);
             } else {
                 displayError(jsonObj.data);
             }
-        } else if (jsonObj.type === "INFO_MESSAGE") {
+        } else if (type === "INFO_MESSAGE") {
             displayInfo(jsonObj.data);
-        } else if (jsonObj.type === "USER_ADDED") {
+        } else if (type === "USER_ADDED") {
             addUser(jsonObj.data);
-        } else if (jsonObj.type === "USER_REMOVED") {
+        } else if (type === "USER_REMOVED") {
             removeUser(jsonObj.data);
-        } else if (jsonObj.type === "FILE_MESSAGE_FOR_ALL") {
+        } else if (type === "FILE_MESSAGE_FOR_ALL") {
             askFileAllMessage(jsonObj);
+        } else if (type === "FILE_MESSAGE") {
+            askFileMessage(jsonObj);
+        } else if (type === "FILE_MESSAGE_REQUEST") {
+            processFileMessageRequest(jsonObj);
+        } else if (type === "FILE_MESSAGE_RESPONSE") {
+            processFileMessageResponse(jsonObj);
         }
     };
 
@@ -82,7 +94,6 @@ function connect () {
     });
 
     $("#messageSend").click(function () {
-        a();
         sendMessage("TEXT_MESSAGE", textMessage.val());
         textMessage.val("");
         textMessage.focus();
@@ -247,61 +258,15 @@ function connect () {
 
         const id = getId();
 
-        if (filesMap.has(receiverName)) {
-            filesMap.get(receiverName).set(id, [file, 0]);
+        if (outputFilesMap.has(receiverName)) {
+            outputFilesMap.get(receiverName).set(id, [file, 0]);
         } else {
-            filesMap.set(receiverName, new Map().set(id, [file, 0]));
+            outputFilesMap.set(receiverName, new Map().set(id, [file, 0]));
         }
 
         sendMessage("FILE_MESSAGE", file.name, null, receiverName, null, id);
 
         $("#fm_modal").modal("hide");
-
-        // readBlob(1, 7);
-        // function readBlob(opt_startByte, opt_stopByte) {
-        //
-        //     var files = document.getElementById('file_input').files;
-        //
-        //     if (!files.length) {
-        //         displayError('Please select a file!');
-        //         return;
-        //     }
-        //
-        //     var file = files[0];
-        //
-        //     var id = getId();
-        //
-        //     if (map.has(receiverName)) {
-        //         map.get(receiverName).set(id, [file, 0]);
-        //     } else {
-        //         map.set(receiverName, new Map().set(id, [file, 0]));
-        //     }
-        //
-        //     sendMessage("FILE_MESSAGE", file.name, null, receiverName, null, id);
-        //
-        //     console.log(map.get(receiverName).get(id)[0].name);
-        //     console.log(file.name);
-        //
-        //     return;
-        //
-        //     var start = parseInt(opt_startByte) || 0;
-        //     var stop = parseInt(opt_stopByte) || file.size - 1;
-        //
-        //     var reader = new FileReader();
-        //
-        //     reader.onloadend = function(evt) {
-        //         if (evt.target.readyState == FileReader.DONE) { // DONE == 2
-        //             document.getElementById('byte_content').textContent = evt.target.result;
-        //             document.getElementById('byte_range').textContent =
-        //                 ['Read bytes: ', start + 1, ' - ', stop + 1,
-        //                     ' of ', file.size, ' byte file'].join('');
-        //         }
-        //     };
-        //
-        //     var blob = file.slice(start, stop + 1);
-        //
-        //     reader.readAsBinaryString(blob);
-        // }
     });
 
     $("#file_all_message").click(function () {
@@ -369,7 +334,7 @@ function connect () {
             '</div> \n' +
             '</div>');
 
-        $("#message_all_file_" + id).text("User " + message.senderName + " send file " + message.data + " for you" +
+        $("#message_all_file_" + id).text("User\n" + message.senderName + "\nsend file\n" + message.data + "\nfor you\n" +
         "download the file?");
 
         const modal = $("#ask_all_file_modal_" + id);
@@ -390,6 +355,127 @@ function connect () {
         });
 
         modal.modal();
+    }
+
+    function askFileMessage(message) {
+        const id = getId();
+
+        $("#body").append(
+            '<div class="modal" id="ask_file_modal_' + id + '" data-backdrop="static" data-keyboard="false" \n' +
+            'tabindex="-1" role="dialog" aria-labelledby="myModalLabel" aria-hidden="true" style="display: none;"> \n' +
+            '<div class="modal-dialog"> \n' +
+            '<div class="chatmodal-container"> \n' +
+            '<h2>File Message</h2><br> \n' +
+            '<form> \n' +
+            '<p id="message_file_' + id + '" class="text-centred bg-danger"></p> \n' +
+            '<input id="download_file_' + id + '" type="button" class="chatmodal-submit bg-success" value="yes">' +
+            '<input id="deny_file_' + id + '" type="button" class="chatmodal-submit bg-success" value="no">' +
+            '</form> \n' +
+            '</div> \n' +
+            '</div> \n' +
+            '</div>');
+
+        $("#message_file_" + id).text("User\n" + message.senderName + "\nsend file\n" + message.data + "\nfor you\n" +
+            "download the file?");
+
+        const modal = $("#ask_file_modal_" + id);
+
+        $("#download_file_" + id).click(function () {
+            modal.modal('hide');
+            modal.remove();
+
+            const fileStream = streamSaver.createWriteStream(message.data, 2048);
+            const writer = fileStream.getWriter();
+
+            if (outputFilesMap.has(message.senderName)) {
+                outputFilesMap.get(message.senderName).set(id, writer);
+            } else {
+                outputFilesMap.set(message.senderName, new Map().set(id, writer));
+            }
+
+            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName,
+                null, message.senderInputStreamId, id);
+        });
+
+        $("#deny_file_" + id).click(function () {
+            modal.modal('hide');
+            modal.remove();
+
+            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName,
+                null, message.senderInputStreamId, -2);
+        });
+
+        modal.modal();
+    }
+
+    function processFileMessageRequest(message) {
+        const writer = outputFilesMap.get(message.senderName).get(message.receiverOutputStreamId);
+
+        const senderInputStreamId = message.senderInputStreamId;
+
+        if (senderInputStreamId > 0) {
+            writer.write(new Uint8Array(message.bytes));
+            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName, null,
+            message.senderInputStreamId, message.receiverOutputStreamId);
+        } else if (senderInputStreamId === 0) {
+            writer.write(new Uint8Array(message.bytes));
+            writer.close();
+            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName, null,
+                message.senderInputStreamId, 0);
+
+            outputFilesMap.get(message.senderName).delete(message.receiverOutputStreamId);
+        } else if (senderInputStreamId === -1) {
+            writer.abort();
+            outputFilesMap.get(message.senderName).delete(message.receiverOutputStreamId);
+        }
+    }
+
+    function processFileMessageResponse(message) {
+        // readBlob(1, 7);
+        // function readBlob(opt_startByte, opt_stopByte) {
+        //
+        //     var files = document.getElementById('file_input').files;
+        //
+        //     if (!files.length) {
+        //         displayError('Please select a file!');
+        //         return;
+        //     }
+        //
+        //     var file = files[0];
+        //
+        //     var id = getId();
+        //
+        //     if (map.has(receiverName)) {
+        //         map.get(receiverName).set(id, [file, 0]);
+        //     } else {
+        //         map.set(receiverName, new Map().set(id, [file, 0]));
+        //     }
+        //
+        //     sendMessage("FILE_MESSAGE", file.name, null, receiverName, null, id);
+        //
+        //     console.log(map.get(receiverName).get(id)[0].name);
+        //     console.log(file.name);
+        //
+        //     return;
+        //
+        //     var start = parseInt(opt_startByte) || 0;
+        //     var stop = parseInt(opt_stopByte) || file.size - 1;
+        //
+        //     var reader = new FileReader();
+        //
+        //     reader.onloadend = function(evt) {
+        //         if (evt.target.readyState == FileReader.DONE) { // DONE == 2
+        //             document.getElementById('byte_content').textContent = evt.target.result;
+        //             document.getElementById('byte_range').textContent =
+        //                 ['Read bytes: ', start + 1, ' - ', stop + 1,
+        //                     ' of ', file.size, ' byte file'].join('');
+        //         }
+        //     };
+        //
+        //     var blob = file.slice(start, stop + 1);
+        //
+        //     reader.readAsBinaryString(blob);
+        // }
     }
 }
 

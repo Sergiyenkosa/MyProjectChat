@@ -68,7 +68,11 @@ public class Server {
             String errorMessage = ("Ошибка сообщение не должно привышать "
                     + textMessageValidator.getMaxTextLength()
                     + " символов.");
-            connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+            message.setType(ERROR_MESSAGE);
+            message.setData(errorMessage);
+            message.setReceiverName(null);
+            connection.send(message);
 
             return false;
         }
@@ -89,13 +93,22 @@ public class Server {
         try {
             String privateMessage = String.format("Private message from %s: %s"
                     , message.getSenderName(), message.getData());
+            Connection receiverConnection = connectionMap.get(message.getReceiverName());
 
-            connectionMap.get(message.getReceiverName()).send(MessageFactory.getTextMessage(privateMessage));
+            message.setType(TEXT_MESSAGE);
+            message.setData(privateMessage);
+            message.setSenderName(null);
+
+            receiverConnection.send(message);
         } catch (IOException | NullPointerException e) {
             String cause = e instanceof IOException ? "не доступен" : "отсутствует в чате";
             String errorMessage = String.format("Ошибка, приватное сообщение не отправлено,"
                     + " пользователь c именем: %s %s.", message.getReceiverName(), cause);
-            connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+            message.setType(ERROR_MESSAGE);
+            message.setData(errorMessage);
+            message.setReceiverName(null);
+            connection.send(message);
         }
     }
 
@@ -114,20 +127,38 @@ public class Server {
     public void sendFileMessage(Connection connection, Message message) throws IOException {
         if (message.getSenderName().equals(message.getReceiverName())) {
 
-            connection.send(MessageFactory.getFileTransferErrorResponseMessageFromServer(message));
+            message.setType(FILE_MESSAGE_RESPONSE);
+            message.setSenderName(null);
+            message.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
+
+            connection.send(message);
 
             String errorMessage = "Server: Ошибка файл: " + message.getData()
                     + " не отправлен, вы не можете отправить файл самому себе";
-            connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+            message.setType(ERROR_MESSAGE);
+            message.setData(errorMessage);
+            message.setReceiverName(null);
+            connection.send(message);
         } else {
             try {
                 connectionMap.get(message.getReceiverName()).send(message);
             } catch (IOException | NullPointerException e) {
-                connection.send(MessageFactory.getFileTransferErrorResponseMessageFromServer(message));
+                message.setType(FILE_MESSAGE_RESPONSE);
+                message.setSenderName(null);
+                message.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
+
+                connection.send(message);
 
                 String errorMessage = String.format("Ошибка, фаил: %s не отправлен, пользователь: " +
                         "%s отсутствует или покинул чат.", message.getData(), message.getReceiverName());
-                connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+                message.setType(ERROR_MESSAGE);
+                message.setData(errorMessage);
+                message.setReceiverName(null);
+                connection.send(message);
+
+                connection.send(message);
             }
         }
     }
@@ -141,7 +172,13 @@ public class Server {
                 String errorMessage = String.format("У пользователя: %s произошла ошибка чтения файла: %s",
                         message.getSenderName(), message.getData());
 
-                receiverConnection.send(MessageFactory.getErrorMessage(errorMessage));
+                message.setType(ERROR_MESSAGE);
+                message.setData(errorMessage);
+                message.setSenderName(null);
+                message.setReceiverName(null);
+                message.setBytes(null);
+
+                receiverConnection.send(message);
             }
         } catch (IOException | NullPointerException e) {
             log.error(e);
@@ -156,7 +193,12 @@ public class Server {
             if (receiverFileId == FILE_IS_DOWNLOADED) {
                 String infoMessage = String.format("Пользователь: %s получил файл: %s"
                         , message.getReceiverName(), message.getData());
-                senderConnection.send(MessageFactory.getInfoMessage(infoMessage));
+
+                message.setType(INFO_MESSAGE);
+                message.setData(infoMessage);
+                message.setSenderName(null);
+                message.setReceiverName(null);
+                senderConnection.send(message);
             } else if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR) {
                 senderConnection.send(message);
 
@@ -165,7 +207,13 @@ public class Server {
                         "У пользователя: %s произошла ошибка записи файла: %s";
                 String errorMessage = String.format(cause,
                         message.getReceiverName(), message.getData());
-                senderConnection.send(MessageFactory.getErrorMessage(errorMessage));
+
+                message.setType(ERROR_MESSAGE);
+                message.setData(errorMessage);
+                message.setSenderName(null);
+                message.setReceiverName(null);
+
+                senderConnection.send(message);;
             } else {
                 senderConnection.send(message);
             }
@@ -192,19 +240,34 @@ public class Server {
 
                     if ((userDao = storageDao.findByLogin(message.getSenderName())) == null) {
                         String errorMessage = "Wrong name, please try again :)";
-                        connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+                        message.setType(ERROR_MESSAGE);
+                        message.setData(errorMessage);
+                        message.setSenderName(null);
+                        connection.send(message);
                     } else if(!userDao.getPassword().equals(message.getData())){
                         String errorMessage = "Wrong password, please try again :)";
-                        connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+                        message.setType(ERROR_MESSAGE);
+                        message.setData(errorMessage);
+                        message.setSenderName(null);
+                        connection.send(message);
                     } else if (!connectionMap.containsKey(userDao.getLogin())) {
                         connectionMap.put(userDao.getLogin(), connection);
 
-                        connection.send(MessageFactory.getUserAcceptedMessage());
+                        message.setType(USER_ACCEPTED);
+                        message.setData(null);
+                        message.setSenderName(null);
+                        connection.send(message);
 
                         return userDao.getLogin();
                     } else {
                         String errorMessage = "The user is already connected :(";
-                        connection.send(MessageFactory.getErrorMessage(errorMessage));
+
+                        message.setType(ERROR_MESSAGE);
+                        message.setData(errorMessage);
+                        message.setSenderName(null);
+                        connection.send(message);
                     }
                 } else {
                     log.error("Unknown message type: " + message.getType());
@@ -230,8 +293,9 @@ public class Server {
 
                 if (type == TEXT_MESSAGE) {
                     if (isMessageTextCorrect(connection, message)) {
-                        sendBroadcastMessage(MessageFactory
-                                .getTextMessage(userName + ": " + message.getData()));
+                        message.setData(userName + ": " + message.getData());
+
+                        sendBroadcastMessage(message);
                     }
                 } else if (type == PRIVATE_MESSAGE) {
                     if (isMessageTextCorrect(connection, message)) {
@@ -252,8 +316,6 @@ public class Server {
                     log.error("Message type error: " + type);
                     break;
                 }
-
-                Thread.sleep(5);
             }
         }
 

@@ -26,7 +26,7 @@ public class ConnectionImpl implements Connection {
     @Override
     public void send(Message message) throws IOException {
         synchronized (out) {
-            out.writeObject(message);
+            out.writeUnshared(message);
             out.flush();
         }
     }

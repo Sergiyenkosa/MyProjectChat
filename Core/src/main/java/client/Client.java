@@ -14,6 +14,7 @@ import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
 
 import static messages.Message.*;
+import static messages.Message.MessageType.*;
 
 /**
  * Created by s.sergienko on 18.10.2016.
@@ -264,7 +265,6 @@ public abstract class Client{
         }
 
         protected void processErrorMessage(String errorMessage) {
-
             writeErrorMessage(errorMessage);
         }
 
@@ -286,8 +286,6 @@ public abstract class Client{
         }
 
         protected void processIncomingFileMessage(Message fileMessage) {
-            Message responseMessage;
-
             if (askGetFile(fileMessage.getSenderName(), fileMessage.getData())) {
                 try {
                     synchronized (closeAndRemoveFromOutputStreamMapLock) {
@@ -307,69 +305,73 @@ public abstract class Client{
 
                         writeInfoMessage("Процес получения файла " + fileMessage.getData());
 
-                        responseMessage = MessageFactory.getFileMessageAnswer(fileMessage, id);
+                        fileMessage.setType(FILE_MESSAGE_RESPONSE);
+                        fileMessage.setReceiverOutputStreamId(id);
                     }
                 } catch (FileNotFoundException e) {
                     writeErrorMessage("Ощибка сохранения файла" + fileMessage.getData());
 
-                    responseMessage = MessageFactory.getFileTransferErrorResponseMessageFromClient(fileMessage);
+                    fileMessage.setType(FILE_MESSAGE_RESPONSE);
+                    fileMessage.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
                 }
             } else {
-                responseMessage = MessageFactory.getFileCancelResponseMessage(fileMessage);
+                fileMessage.setType(FILE_MESSAGE_RESPONSE);
+                fileMessage.setReceiverOutputStreamId(FILE_CANCEL);
             }
 
             try {
-                connection.send(responseMessage);
+                connection.send(fileMessage);
             } catch (IOException e) {
                 clientConnected = false;
             }
         }
 
-        protected void processIncomingFileMessageRequest(Message fileMessageRequest) {
+        protected void processIncomingFileMessageRequest(Message fileMessage) {
             synchronized (closeAndRemoveFromOutputStreamMapLock) {
-                if (fileMessageRequest.getSenderInputStreamId() == Message.FILE_TRANSFER_ERROR) {
-                    closeAndRemoveStreamFromOutputStreamMap(fileMessageRequest.getSenderName()
-                            , fileMessageRequest.getReceiverOutputStreamId(), false);
+                if (fileMessage.getSenderInputStreamId() == Message.FILE_TRANSFER_ERROR) {
+                    closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
+                            , fileMessage.getReceiverOutputStreamId(), false);
                 } else {
-                    if (outputStreamsMap.containsKey(fileMessageRequest.getSenderName()) &&
-                            outputStreamsMap.get(fileMessageRequest.getSenderName())
-                                    .containsKey(fileMessageRequest.getReceiverOutputStreamId())) {
-
-                        Message responseMessage;
-
+                    if (outputStreamsMap.containsKey(fileMessage.getSenderName()) &&
+                            outputStreamsMap.get(fileMessage.getSenderName())
+                                    .containsKey(fileMessage.getReceiverOutputStreamId())) {
                         try {
                             BufferedOutputStream outputStream = new BufferedOutputStream(outputStreamsMap.
-                                    get(fileMessageRequest.getSenderName())
-                                    .get(fileMessageRequest.getReceiverOutputStreamId()));
+                                    get(fileMessage.getSenderName())
+                                    .get(fileMessage.getReceiverOutputStreamId()));
 
-                            outputStream.write(fileMessageRequest.getBytes());
+                            outputStream.write(fileMessage.getBytes());
                             outputStream.flush();
 
-                            if (fileMessageRequest.getSenderInputStreamId() == Message.FILE_IS_UPLOADED) {
-                                closeAndRemoveStreamFromOutputStreamMap(fileMessageRequest.getSenderName()
-                                        , fileMessageRequest.getReceiverOutputStreamId(), true);
+                            if (fileMessage.getSenderInputStreamId() == Message.FILE_IS_UPLOADED) {
+                                closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
+                                        , fileMessage.getReceiverOutputStreamId(), true);
 
                                 writeInfoMessage(String.format("Файл: %s от пользователя: %s загружен"
-                                        , fileMessageRequest.getData(), fileMessageRequest.getSenderName()));
+                                        , fileMessage.getData(), fileMessage.getSenderName()));
 
-                                responseMessage = MessageFactory.
-                                        getFileIsDownloadedResponseMessage(fileMessageRequest);
+                                fileMessage.setType(FILE_MESSAGE_RESPONSE);
+                                fileMessage.setReceiverOutputStreamId(FILE_IS_DOWNLOADED);
+                                fileMessage.setBytes(null);
                             } else {
-                                responseMessage = MessageFactory.getFileMessageResponse(fileMessageRequest);
+
+                                fileMessage.setType(FILE_MESSAGE_RESPONSE);
+                                fileMessage.setBytes(null);
                             }
                         } catch (IOException e) {
                             writeErrorMessage(String.format("Ощибка записи файла: %s от пользователя: %s"
-                                    , fileMessageRequest.getData(), fileMessageRequest.getSenderName()));
+                                    , fileMessage.getData(), fileMessage.getSenderName()));
 
-                            closeAndRemoveStreamFromOutputStreamMap(fileMessageRequest.getSenderName()
-                                    , fileMessageRequest.getReceiverOutputStreamId(), false);
+                            closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
+                                    , fileMessage.getReceiverOutputStreamId(), false);
 
-                            responseMessage = MessageFactory.
-                                    getFileTransferErrorResponseMessageFromClient(fileMessageRequest);
+                            fileMessage.setType(FILE_MESSAGE_RESPONSE);
+                            fileMessage.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
+                            fileMessage.setBytes(null);
                         }
 
                         try {
-                            connection.send(responseMessage);
+                            connection.send(fileMessage);
                         } catch (IOException e) {
                             clientConnected = false;
                         }
@@ -378,50 +380,49 @@ public abstract class Client{
             }
         }
 
-        protected void processIncomingFileMessageResponse(Message fileMessageResponse) {
+        protected void processIncomingFileMessageResponse(Message fileMessage) {
             synchronized (closeAndRemoveFromInputStreamsMapLock) {
-                if (inputStreamsMap.containsKey(fileMessageResponse.getReceiverName()) &&
-                        inputStreamsMap.get(fileMessageResponse.getReceiverName())
-                                .containsKey(fileMessageResponse.getSenderInputStreamId())) {
-                    if (fileMessageResponse.getReceiverOutputStreamId() < 0) {
-                        closeAndRemoveStreamFromInputStreamsMap(fileMessageResponse.getReceiverName()
-                                , fileMessageResponse.getSenderInputStreamId());
+                if (inputStreamsMap.containsKey(fileMessage.getReceiverName()) &&
+                        inputStreamsMap.get(fileMessage.getReceiverName())
+                                .containsKey(fileMessage.getSenderInputStreamId())) {
+                    if (fileMessage.getReceiverOutputStreamId() < 0) {
+                        closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
+                                , fileMessage.getSenderInputStreamId());
                     } else {
-                        Message requestMessage;
-
                         try {
-                            BufferedInputStream inputStream = new BufferedInputStream(
-                                    inputStreamsMap.get(fileMessageResponse.getReceiverName())
-                                    .get(fileMessageResponse.getSenderInputStreamId()));
+                            InputStream inputStream = inputStreamsMap.get(fileMessage.getReceiverName())
+                                    .get(fileMessage.getSenderInputStreamId());
 
-                            if (inputStream.available() > 1024 * 1024) {
-                                byte[] bytes = new byte[1024 * 1024];
+                            if (inputStream.available() > 1024 * 6) {
+                                byte[] bytes = new byte[1024 * 6];
                                 inputStream.read(bytes, 0, bytes.length);
 
-                                requestMessage = MessageFactory.getFileMessageRequest(fileMessageResponse, bytes);
+                                fileMessage.setType(FILE_MESSAGE_REQUEST);
+                                fileMessage.setBytes(bytes);
                             } else {
                                 byte[] bytes = new byte[inputStream.available()];
                                 inputStream.read(bytes, 0, bytes.length);
 
-                                requestMessage = MessageFactory.
-                                        getFileIsUploadedRequestMessage(fileMessageResponse, bytes);
+                                fileMessage.setType(FILE_MESSAGE_REQUEST);
+                                fileMessage.setSenderInputStreamId(FILE_IS_UPLOADED);
+                                fileMessage.setBytes(bytes);
 
-                                closeAndRemoveStreamFromInputStreamsMap(fileMessageResponse.getReceiverName()
-                                        , fileMessageResponse.getSenderInputStreamId());
+                                closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
+                                        , fileMessage.getSenderInputStreamId());
                             }
                         } catch (IOException e) {
                             writeErrorMessage(String.format("Ощибка чтения файла: %s для пользователя: %s"
-                                    , fileMessageResponse.getData(), fileMessageResponse.getReceiverName()));
+                                    , fileMessage.getData(), fileMessage.getReceiverName()));
 
-                            closeAndRemoveStreamFromInputStreamsMap(fileMessageResponse.getReceiverName()
-                                    , fileMessageResponse.getSenderInputStreamId());
+                            closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
+                                    , fileMessage.getSenderInputStreamId());
 
-                            requestMessage = MessageFactory.
-                                    getFileTransferErrorRequestMessageFromClient(fileMessageResponse);
+                            fileMessage.setType(FILE_MESSAGE_REQUEST);
+                            fileMessage.setSenderInputStreamId(FILE_TRANSFER_ERROR);
                         }
 
                         try {
-                            connection.send(requestMessage);
+                            connection.send(fileMessage);
                         } catch (IOException e) {
                             clientConnected = false;
                         }
@@ -435,7 +436,11 @@ public abstract class Client{
                 Message message = connection.receive();
 
                 if (message.getType() == MessageType.CREDENTIALS_REQUEST) {
-                    connection.send(MessageFactory.getCredentialsMessage(getUserName(), getUserPassword()));
+
+                    message.setType(USER_CREDENTIALS);
+                    message.setData(getUserPassword());
+                    message.setSenderName(getUserName());
+                    connection.send(message);
                 } else if (message.getType() == MessageType.USER_ACCEPTED) {
                     notifyConnectionStatusChanged(true);
                     break;
@@ -453,9 +458,9 @@ public abstract class Client{
                 MessageType messageType = message.getType();
 
                 if (messageType == MessageType.FILE_MESSAGE_REQUEST) {
-                    new Thread(() -> processIncomingFileMessageRequest(message)).start();
+                    processIncomingFileMessageRequest(message);
                 } else if (messageType == MessageType.FILE_MESSAGE_RESPONSE) {
-                    new Thread(() -> processIncomingFileMessageResponse(message)).start();
+                    processIncomingFileMessageResponse(message);
                 } else if (messageType == MessageType.TEXT_MESSAGE) {
                     processIncomingMessage(message.getData());
                 } else if (messageType == MessageType.INFO_MESSAGE) {
