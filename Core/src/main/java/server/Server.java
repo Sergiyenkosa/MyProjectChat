@@ -7,8 +7,6 @@ import daos.UserDao;
 import messages.Message;
 import messages.MessageFactory;
 import org.apache.log4j.Logger;
-import org.springframework.context.ApplicationContext;
-import org.springframework.context.support.ClassPathXmlApplicationContext;
 import server.validators.TextMessageValidator;
 
 import java.io.IOException;
@@ -52,22 +50,13 @@ public class Server {
         }
     }
 
-    public static void main(String[] args) {
-        ApplicationContext context
-                = new ClassPathXmlApplicationContext("spring/core-context.xml");
-
-        Server server = (Server) context.getBean("server");
-
-        server.runServer();
-    }
-
-    public boolean isMessageTextCorrect(Connection connection, Message message) throws IOException {
+    private boolean isMessageTextCorrect(Connection connection, Message message) throws IOException {
         if (textMessageValidator.isTextMessageCorrect(message.getData())) {
             return true;
         } else {
-            String errorMessage = ("Ошибка сообщение не должно привышать "
+            String errorMessage = ("Error, message can not be more than "
                     + textMessageValidator.getMaxTextLength()
-                    + " символов.");
+                    + " characters long");
 
             message.setType(ERROR_MESSAGE);
             message.setData(errorMessage);
@@ -78,18 +67,18 @@ public class Server {
         }
     }
 
-    public void sendBroadcastMessage(Message message) {
+    private void sendBroadcastMessage(Message message) {
         for (Map.Entry<String, Connection> entry : connectionMap.entrySet()) {
             try {
                 entry.getValue().send(message);
             } catch (IOException e) {
-                log.error("Произошла ошибка при обмене данными с удаленным адресом: "
+                log.error("Remote address  communicating error: "
                         + entry.getValue().getRemoteSocketAddress(), e);
             }
         }
     }
 
-    public void sendPrivateMessage(Connection connection, Message message) throws IOException {
+    private void sendPrivateMessage(Connection connection, Message message) throws IOException {
         try {
             String privateMessage = String.format("Private message from %s: %s"
                     , message.getSenderName(), message.getData());
@@ -101,9 +90,8 @@ public class Server {
 
             receiverConnection.send(message);
         } catch (IOException | NullPointerException e) {
-            String cause = e instanceof IOException ? "не доступен" : "отсутствует в чате";
-            String errorMessage = String.format("Ошибка, приватное сообщение не отправлено,"
-                    + " пользователь c именем: %s %s.", message.getReceiverName(), cause);
+            String errorMessage = "Error, private message is not sent, user " +
+                    message.getReceiverName() + " is unavailable.";
 
             message.setType(ERROR_MESSAGE);
             message.setData(errorMessage);
@@ -112,7 +100,7 @@ public class Server {
         }
     }
 
-    public void sendFileMessageForAll(Message message) {
+    private void sendFileMessageForAll(Message message) {
         for (Map.Entry<String, Connection> entry : connectionMap.entrySet()) {
             if (!entry.getKey().equals(message.getSenderName())) {
                 try {
@@ -124,7 +112,7 @@ public class Server {
         }
     }
 
-    public void sendFileMessage(Connection connection, Message message) throws IOException {
+    private void sendFileMessage(Connection connection, Message message) throws IOException {
         if (message.getSenderName().equals(message.getReceiverName())) {
 
             message.setType(FILE_MESSAGE_RESPONSE);
@@ -133,8 +121,8 @@ public class Server {
 
             connection.send(message);
 
-            String errorMessage = "Server: Ошибка файл: " + message.getData()
-                    + " не отправлен, вы не можете отправить файл самому себе";
+            String errorMessage = "Error, file " + message.getData() +
+                    " isn't sent, you can't send the file to yourself";
 
             message.setType(ERROR_MESSAGE);
             message.setData(errorMessage);
@@ -150,8 +138,8 @@ public class Server {
 
                 connection.send(message);
 
-                String errorMessage = String.format("Ошибка, фаил: %s не отправлен, пользователь: " +
-                        "%s отсутствует или покинул чат.", message.getData(), message.getReceiverName());
+                String errorMessage = String.format("Error, file %s is not sent, user %s is unavailable.",
+                        message.getData(), message.getReceiverName());
 
                 message.setType(ERROR_MESSAGE);
                 message.setData(errorMessage);
@@ -163,14 +151,14 @@ public class Server {
         }
     }
 
-    public void sendFileMessageRequest(Message message) throws IOException {
+    private void sendFileMessageRequest(Message message) throws IOException {
         try {
             Connection receiverConnection = connectionMap.get(message.getReceiverName());
             receiverConnection.send(message);
 
             if (message.getSenderInputStreamId() == FILE_TRANSFER_ERROR) {
-                String errorMessage = String.format("У пользователя: %s произошла ошибка чтения файла: %s",
-                        message.getSenderName(), message.getData());
+                String errorMessage = String.format("Error reading file %s, on user %s side.",
+                        message.getData(), message.getSenderName());
 
                 message.setType(ERROR_MESSAGE);
                 message.setData(errorMessage);
@@ -185,13 +173,13 @@ public class Server {
         }
     }
 
-    public void sendFileMessageResponse(Message message) throws IOException {
+    private void sendFileMessageResponse(Message message) throws IOException {
         try {
             int receiverFileId = message.getReceiverOutputStreamId();
             Connection senderConnection = connectionMap.get(message.getSenderName());
 
             if (receiverFileId == FILE_IS_DOWNLOADED) {
-                String infoMessage = String.format("Пользователь: %s получил файл: %s"
+                String infoMessage = String.format("User %s has received a file %s"
                         , message.getReceiverName(), message.getData());
 
                 message.setType(INFO_MESSAGE);
@@ -203,8 +191,8 @@ public class Server {
                 senderConnection.send(message);
 
                 String cause = receiverFileId == Message.FILE_CANCEL ?
-                        "Пользователь: %s отказался принять файл: %s" :
-                        "У пользователя: %s произошла ошибка записи файла: %s";
+                        "User %s refused to accept file %s" :
+                        "Error writing file %s, on user %s side";
                 String errorMessage = String.format(cause,
                         message.getReceiverName(), message.getData());
 
@@ -213,7 +201,7 @@ public class Server {
                 message.setSenderName(null);
                 message.setReceiverName(null);
 
-                senderConnection.send(message);;
+                senderConnection.send(message);
             } else {
                 senderConnection.send(message);
             }
@@ -277,7 +265,7 @@ public class Server {
             }
         }
 
-        public void sendListOfUsers(Connection connection) throws IOException {
+        private void sendListOfUsers(Connection connection) throws IOException {
             for (Map.Entry<String, Connection> entry : connectionMap.entrySet()) {
                 if (connection != entry.getValue()) {
                     connection.send(MessageFactory.getUserAddedMessage(entry.getKey()));
@@ -285,7 +273,7 @@ public class Server {
             }
         }
 
-        public void serverMainLoop(Connection connection, String userName)
+        private void serverMainLoop(Connection connection, String userName)
                 throws IOException, ClassNotFoundException, InterruptedException {
             while (true) {
                 Message message = connection.receive();
@@ -321,8 +309,8 @@ public class Server {
 
         @Override
         public void run() {
-            log.info("установлено новое соединение с удаленным адресом: "
-                    + socket.getRemoteSocketAddress());
+            log.info("A new connection with a remote address "
+                    + socket.getRemoteSocketAddress() + "is established");
 
             String userName = "";
 
@@ -335,7 +323,7 @@ public class Server {
                     serverMainLoop(connection, userName);
                 }
             } catch (Exception e) {
-                log.error("Произошла ошибка при обмене данными с удаленным адресом: "
+                log.error("An error occurred while communicating with the remote address: "
                         + socket.getRemoteSocketAddress(), e);
             }
 
@@ -345,8 +333,7 @@ public class Server {
                 sendBroadcastMessage(MessageFactory.getUserRemovedMessage(userName));
             }
 
-            log.info("Соединение с удаленным адресом: "
-                    + socket.getRemoteSocketAddress() + " закрыто");
+            log.info("Connection to remote address " + socket.getRemoteSocketAddress() + " is closed");
         }
     }
 }

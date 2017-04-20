@@ -21,7 +21,9 @@ import static messages.Message.MessageType.*;
  */
 public abstract class Client{
     private Connection connection;
+
     private volatile boolean clientConnected = false;
+
     private Map<String, Map<Integer, FileInputStream>> inputStreamsMap = new ConcurrentHashMap<>();
     private Map<String, Map<Integer, FileOutputStream>> outputStreamsMap = new ConcurrentHashMap<>();
 
@@ -48,20 +50,19 @@ public abstract class Client{
 
     protected abstract File getDirectoryFile ();
 
-    private Integer getStreamId() {
-
+    protected Integer getStreamId() {
         return id.getAndIncrement();
     }
 
-    public boolean isClientConnected() {
+    protected boolean isClientConnected() {
         return clientConnected;
     }
 
-    public void setClientConnected(boolean clientConnected) {
+    protected void setClientConnected(boolean clientConnected) {
         this.clientConnected = clientConnected;
     }
 
-    public void sendTextMessage(String textMessage) {
+    protected void sendTextMessage(String textMessage) {
         try {
             connection.send(MessageFactory.getTextMessage(textMessage));
         } catch (IOException e) {
@@ -69,7 +70,7 @@ public abstract class Client{
         }
     }
 
-    public void sendPrivateMessage(String privateMessage, String receiverName) {
+    protected void sendPrivateMessage(String privateMessage, String receiverName) {
         try {
             connection.send(MessageFactory.getPrivateMessage(privateMessage, receiverName));
         } catch (IOException e) {
@@ -77,7 +78,7 @@ public abstract class Client{
         }
     }
 
-    public void sendFileMessageForAll(String fileName, FileInputStream fileInputStream) {
+    protected void sendFileMessageForAll(String fileName, FileInputStream fileInputStream) {
         try (BufferedInputStream inputStream = new BufferedInputStream(fileInputStream)){
             int byteSize = inputStream.available();
 
@@ -100,7 +101,7 @@ public abstract class Client{
         }
     }
 
-    public void sendFileMessage(String receiverName, String fileName, FileInputStream fileInputStream) {
+    protected void sendFileMessage(String receiverName, String fileName, FileInputStream fileInputStream) {
         try {
             Integer id = getStreamId();
 
@@ -121,19 +122,19 @@ public abstract class Client{
         }
     }
 
-    public String askForExit() {
+    protected String askForExit() {
         if (inputStreamsMap.size() > 0 && outputStreamsMap.size() > 0) {
-            return "У вас есть незавершенный прием и передача файлов, вы хотите прервать их? yes / no";
+            return "You have unfinished downloading and uploading files. Do you want to interrupt them?";
         } else if (inputStreamsMap.size() > 0) {
-            return "У вас есть незавершенная передача файлов, вы хотите прервать ее? yes / no";
+            return "You have unfinished uploading files. Do you want to interrupt them?";
         } else if (outputStreamsMap.size() > 0) {
-            return "У вас есть незавершенный прием файлов, вы хотите прервать его? yes / no";
+            return "You have unfinished downloading files. Do you want to interrupt them?";
         } else {
-            return "Вы действительно хотите выйти из программы? yes / no";
+            return "Do you really want to exit?";
         }
     }
 
-    public void closeAndRemoveAllStreams(boolean showErrorMessage) {
+    protected void closeAndRemoveAllStreams(boolean showErrorMessage) {
         for (Map.Entry<String, Map<Integer, FileInputStream>> entry : inputStreamsMap.entrySet()) {
             closeAndRemoveAllReceiverStreamsFromInputStreamsMap(entry.getKey(), showErrorMessage);
         }
@@ -206,7 +207,7 @@ public abstract class Client{
                         File file = new File((String) pathField.get(inputStream));
 
                         if (showErrorMessage) {
-                            writeErrorMessage(String.format("Error transferring file: %s to user: %s"
+                            writeErrorMessage(String.format("Error sending file: %s to user: %s"
                                     , file.getName(), receiverName));
                         }
 
@@ -234,7 +235,7 @@ public abstract class Client{
                         file = new File((String) pathField.get(outputStream));
 
                         if (showErrorMessage) {
-                            writeErrorMessage(String.format("Ошибка приема файла: %s от учасника: %s"
+                            writeErrorMessage(String.format("Error receiving file %s, from user %s"
                                     , file.getName(), senderName));
                         }
 
@@ -250,7 +251,7 @@ public abstract class Client{
         }
     }
 
-    public abstract class SocketThread extends Thread {
+    protected abstract class SocketThread extends Thread {
 
         protected abstract void processIncomingMessage(String message);
 
@@ -278,9 +279,9 @@ public abstract class Client{
                     outputStream.write(fileMessageForAll.getBytes());
                     outputStream.flush();
 
-                    writeInfoMessage("Файл сохранен");
+                    writeInfoMessage("File saved");
                 } catch (IOException e) {
-                    writeErrorMessage("Ощибка сохранения файла");
+                    writeErrorMessage("Error saving file");
                 }
             }
         }
@@ -303,13 +304,13 @@ public abstract class Client{
                             outputStreamsMap.put(senderName, map);
                         }
 
-                        writeInfoMessage("Процес получения файла " + fileMessage.getData());
+                        writeInfoMessage("File obtaining process" + fileMessage.getData());
 
                         fileMessage.setType(FILE_MESSAGE_RESPONSE);
                         fileMessage.setReceiverOutputStreamId(id);
                     }
                 } catch (FileNotFoundException e) {
-                    writeErrorMessage("Ощибка сохранения файла" + fileMessage.getData());
+                    writeErrorMessage("Error saving file" + fileMessage.getData());
 
                     fileMessage.setType(FILE_MESSAGE_RESPONSE);
                     fileMessage.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
@@ -347,7 +348,7 @@ public abstract class Client{
                                 closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
                                         , fileMessage.getReceiverOutputStreamId(), true);
 
-                                writeInfoMessage(String.format("Файл: %s от пользователя: %s загружен"
+                                writeInfoMessage(String.format("File %s from user %s is uploaded"
                                         , fileMessage.getData(), fileMessage.getSenderName()));
 
                                 fileMessage.setType(FILE_MESSAGE_RESPONSE);
@@ -359,7 +360,7 @@ public abstract class Client{
                                 fileMessage.setBytes(null);
                             }
                         } catch (IOException e) {
-                            writeErrorMessage(String.format("Ощибка записи файла: %s от пользователя: %s"
+                            writeErrorMessage(String.format("Error writing file %s from user %s"
                                     , fileMessage.getData(), fileMessage.getSenderName()));
 
                             closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
@@ -411,7 +412,7 @@ public abstract class Client{
                                         , fileMessage.getSenderInputStreamId());
                             }
                         } catch (IOException e) {
-                            writeErrorMessage(String.format("Ощибка чтения файла: %s для пользователя: %s"
+                            writeErrorMessage(String.format("Error reading file %s, for user %s"
                                     , fileMessage.getData(), fileMessage.getReceiverName()));
 
                             closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
@@ -431,7 +432,7 @@ public abstract class Client{
             }
         }
 
-        private void clientHandshake() throws IOException, ClassNotFoundException {
+        protected void clientHandshake() throws IOException, ClassNotFoundException {
             while (!isInterrupted()) {
                 Message message = connection.receive();
 

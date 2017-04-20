@@ -12,8 +12,8 @@ function connect () {
     const allUserNamesSet = new Set();
     let id = 0;
     let receiverName;
-    const outputFilesMap = new Map();
     const inputFilesMap = new Map();
+    const outputFilesMap = new Map();
 
     function getId() {
         id = id + 1;
@@ -46,8 +46,10 @@ function connect () {
             displayInfo(jsonObj.data);
         } else if (type === "USER_ADDED") {
             addUser(jsonObj.data);
+
         } else if (type === "USER_REMOVED") {
             removeUser(jsonObj.data);
+            deleteUserFromOutputAndInputFilesMap(jsonObj.data)
         } else if (type === "FILE_MESSAGE_FOR_ALL") {
             askFileAllMessage(jsonObj);
         } else if (type === "FILE_MESSAGE") {
@@ -114,7 +116,8 @@ function connect () {
             '</form> \n' +
             '</div> \n' +
             '</div> \n' +
-            '</div>');
+            '</div>'
+        );
 
         $("#message_error_" + id).text(message);
 
@@ -143,7 +146,8 @@ function connect () {
             '</form> \n' +
             '</div> \n' +
             '</div> \n' +
-            '</div>');
+            '</div>'
+        );
 
         $("#message_info_" + id).text(message);
 
@@ -258,10 +262,10 @@ function connect () {
 
         const id = getId();
 
-        if (outputFilesMap.has(receiverName)) {
-            outputFilesMap.get(receiverName).set(id, [file, 0]);
+        if (inputFilesMap.has(receiverName)) {
+            inputFilesMap.get(receiverName).set(id, [file, 0]);
         } else {
-            outputFilesMap.set(receiverName, new Map().set(id, [file, 0]));
+            inputFilesMap.set(receiverName, new Map().set(id, [file, 0]));
         }
 
         sendMessage("FILE_MESSAGE", file.name, null, receiverName, null, id);
@@ -332,7 +336,8 @@ function connect () {
             '</form> \n' +
             '</div> \n' +
             '</div> \n' +
-            '</div>');
+            '</div>'
+        );
 
         $("#message_all_file_" + id).text("User\n" + message.senderName + "\nsend file\n" + message.data + "\nfor you\n" +
         "download the file?");
@@ -373,7 +378,8 @@ function connect () {
             '</form> \n' +
             '</div> \n' +
             '</div> \n' +
-            '</div>');
+            '</div>'
+        );
 
         $("#message_file_" + id).text("User\n" + message.senderName + "\nsend file\n" + message.data + "\nfor you\n" +
             "download the file?");
@@ -431,51 +437,70 @@ function connect () {
     }
 
     function processFileMessageResponse(message) {
-        // readBlob(1, 7);
-        // function readBlob(opt_startByte, opt_stopByte) {
-        //
-        //     var files = document.getElementById('file_input').files;
-        //
-        //     if (!files.length) {
-        //         displayError('Please select a file!');
-        //         return;
-        //     }
-        //
-        //     var file = files[0];
-        //
-        //     var id = getId();
-        //
-        //     if (map.has(receiverName)) {
-        //         map.get(receiverName).set(id, [file, 0]);
-        //     } else {
-        //         map.set(receiverName, new Map().set(id, [file, 0]));
-        //     }
-        //
-        //     sendMessage("FILE_MESSAGE", file.name, null, receiverName, null, id);
-        //
-        //     console.log(map.get(receiverName).get(id)[0].name);
-        //     console.log(file.name);
-        //
-        //     return;
-        //
-        //     var start = parseInt(opt_startByte) || 0;
-        //     var stop = parseInt(opt_stopByte) || file.size - 1;
-        //
-        //     var reader = new FileReader();
-        //
-        //     reader.onloadend = function(evt) {
-        //         if (evt.target.readyState == FileReader.DONE) { // DONE == 2
-        //             document.getElementById('byte_content').textContent = evt.target.result;
-        //             document.getElementById('byte_range').textContent =
-        //                 ['Read bytes: ', start + 1, ' - ', stop + 1,
-        //                     ' of ', file.size, ' byte file'].join('');
-        //         }
-        //     };
-        //
-        //     var blob = file.slice(start, stop + 1);
-        //
-        //     reader.readAsBinaryString(blob);
-        // }
+        if (message.receiverOutputStreamId > 0) {
+            let senderInputStreamId = message.senderInputStreamId;
+
+            const inputArray = inputFilesMap.get(message.receiverName).get(senderInputStreamId);
+            const file = inputArray[0];
+            const startByte = inputArray[1];
+            let stopByte;
+
+            if (startByte + (1024 * 2) > file.size) {
+                stopByte = file.size;
+                senderInputStreamId = 0;
+            } else {
+                stopByte = startByte + (1024 * 2);
+            }
+
+            const promise = new Promise(getBuffer);
+
+            promise.then(function(data) {
+                sendMessage("FILE_MESSAGE_REQUEST", message.data, message.senderName, message.receiverName, Array.from(data),
+                    senderInputStreamId, message.receiverOutputStreamId);
+
+                inputArray[1] = stopByte;
+            }).catch(function(err) {
+                console.log('Error: ',err);
+                displayError("File reading error");
+
+                sendMessage("FILE_MESSAGE_REQUEST", message.data, message.senderName, message.receiverName, null,
+                    -1, message.receiverOutputStreamId);
+
+                inputFilesMap.get(message.receiverName).delete(message.senderInputStreamId);
+                displayError("Error reading file: " + file.name + ", for user: " + message.receiverName)
+            });
+
+            function getBuffer(resolve) {
+                const reader = new FileReader();
+                const blob = file.slice(startByte, stopByte);
+                reader.readAsArrayBuffer(blob);
+                reader.onload = function() {
+                    const arrayBuffer = reader.result;
+                    const bytes = new Uint8Array(arrayBuffer);
+                    resolve(bytes);
+                }
+            }
+        } else {
+            inputFilesMap.get(message.receiverName).delete(message.senderInputStreamId);
+        }
+    }
+
+    function deleteUserFromOutputAndInputFilesMap(userName) {
+        if (outputFilesMap.has(userName)) {
+            for (const value of outputFilesMap.get(userName).values()) {
+                value.abort();
+            }
+
+            outputFilesMap.delete(userName);
+        }
+
+        if (inputFilesMap.has(userName)) {
+            for (const value of inputFilesMap.get(userName).values()) {
+                displayError("Error sending file: " + value[0].name + " to user: " + userName)
+            }
+
+            inputFilesMap.delete(userName);
+        }
     }
 }
 

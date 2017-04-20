@@ -20,10 +20,6 @@ public class ConsoleClient extends Client {
         this.consoleHelper = consoleHelper;
     }
 
-    public static void main(String[] args) {
-        new ConsoleClient().run();
-    }
-
     @Override
     public void run() {
         SocketThread socketThread = new ConsoleSocketThread();
@@ -117,7 +113,12 @@ public class ConsoleClient extends Client {
         }
     }
 
-    protected boolean shouldSentTextFromConsole() {
+    @Override
+    protected String askForExit() {
+        return super.askForExit() + " yes \\ no";
+    }
+
+    private boolean shouldSentTextFromConsole() {
         return true;
     }
 
@@ -193,7 +194,7 @@ public class ConsoleClient extends Client {
         }
     }
 
-    public class ConsoleSocketThread extends Client.SocketThread {
+    protected class ConsoleSocketThread extends Client.SocketThread {
 
         @Override
         protected void processIncomingMessage(String message) {
