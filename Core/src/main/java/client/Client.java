@@ -439,8 +439,8 @@ public abstract class Client{
                 if (message.getType() == MessageType.CREDENTIALS_REQUEST) {
 
                     message.setType(USER_CREDENTIALS);
-                    message.setData(getUserPassword());
                     message.setSenderName(getUserName());
+                    message.setData(getUserPassword());
                     connection.send(message);
                 } else if (message.getType() == MessageType.USER_ACCEPTED) {
                     notifyConnectionStatusChanged(true);

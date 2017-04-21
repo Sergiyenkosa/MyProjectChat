@@ -157,7 +157,7 @@ public class Server {
             receiverConnection.send(message);
 
             if (message.getSenderInputStreamId() == FILE_TRANSFER_ERROR) {
-                String errorMessage = String.format("Error reading file %s, on user %s side.",
+                String errorMessage = String.format("Error reading file %s, on user %s's side.",
                         message.getData(), message.getSenderName());
 
                 message.setType(ERROR_MESSAGE);
@@ -192,7 +192,7 @@ public class Server {
 
                 String cause = receiverFileId == Message.FILE_CANCEL ?
                         "User %s refused to accept file %s" :
-                        "Error writing file %s, on user %s side";
+                        "Error writing file %s, on user %s's side";
                 String errorMessage = String.format(cause,
                         message.getReceiverName(), message.getData());
 

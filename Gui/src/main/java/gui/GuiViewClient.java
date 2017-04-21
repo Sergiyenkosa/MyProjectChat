@@ -12,14 +12,14 @@ import java.util.Set;
 public class GuiViewClient {
     private final GuiControllerClient controller;
 
-    private JFrame frame = new JFrame("Чат");
+    private JFrame frame = new JFrame("Chat");
     private JTextField textField = new JTextField(50);
     private JTextArea messages = new JTextArea(10, 50);
     private JTextArea users = new JTextArea(10, 10);
     private JList<String> usersSelectList = new JList<>();
-    private JButton sendPrivateMessageButton = new JButton("Отправить приватное сообщение");
-    private JButton sendFileButton = new JButton("Отправить файл");
-    private JButton sendFileForAllButton = new JButton("Отправить файл для всех");
+    private JButton sendPrivateMessageButton = new JButton("Send private message");
+    private JButton sendFileButton = new JButton("Send file message");
+    private JButton sendFileForAllButton = new JButton("Send file message for all");
 
     public GuiViewClient(GuiControllerClient controller) {
         this.controller = controller;
@@ -39,21 +39,21 @@ public class GuiViewClient {
         sendPrivateMessageButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                final JDialog dialog = new JDialog(frame, "Выбор пользователя", true);
+                final JDialog dialog = new JDialog(frame, "Select user", true);
 
-                JButton button = new JButton("Выбрать");
+                JButton button = new JButton("ok");
                 button.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
                         final String receiverName = usersSelectList.getSelectedValue();
                         if (receiverName != null) {
-                            final JDialog dialog1 = new JDialog(dialog,"Текст сообщения", true);
+                            final JDialog dialog1 = new JDialog(dialog,"Private message", true);
 
                             final JTextField privateTextField = new JTextField(50);
                             privateTextField.setMaximumSize(new Dimension(200, 0));
                             privateTextField.setEditable(true);
 
-                            JButton button1 = new JButton("Отправить");
+                            JButton button1 = new JButton("send message");
                             button1.addActionListener(new ActionListener() {
                                 @Override
                                 public void actionPerformed(ActionEvent e) {
@@ -85,7 +85,7 @@ public class GuiViewClient {
             public void actionPerformed(ActionEvent e) {
                 JFileChooser chooser = new JFileChooser();
                 chooser.setCurrentDirectory(new java.io.File("."));
-                chooser.setDialogTitle("Выбор файла");
+                chooser.setDialogTitle("select file");
                 chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                 chooser.setAcceptAllFileFilterUsed(false);
 
@@ -94,7 +94,7 @@ public class GuiViewClient {
                     try {
                         controller.sendFileMessageForAll(file.getName(), new FileInputStream(file));
                     } catch (FileNotFoundException e1) {
-                        errorMessage("Такого файла не существует");
+                        errorMessage("Error file does not exist");
                     }
                 }
             }
@@ -103,9 +103,9 @@ public class GuiViewClient {
         sendFileButton.addActionListener(new ActionListener() {
             @Override
             public void actionPerformed(ActionEvent e) {
-                final JDialog dialog = new JDialog(frame, "Выбор пользователя", true);
+                final JDialog dialog = new JDialog(frame, "Select user", true);
 
-                JButton button = new JButton("Выбрать");
+                JButton button = new JButton("ok");
                 button.addActionListener(new ActionListener() {
                     @Override
                     public void actionPerformed(ActionEvent e) {
@@ -114,7 +114,7 @@ public class GuiViewClient {
 
                             JFileChooser chooser = new JFileChooser();
                             chooser.setCurrentDirectory(new java.io.File("."));
-                            chooser.setDialogTitle("Выбор файла");
+                            chooser.setDialogTitle("Select file");
                             chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
                             chooser.setAcceptAllFileFilterUsed(false);
 
@@ -125,7 +125,7 @@ public class GuiViewClient {
                                     dialog.setVisible(false);
                                 } catch (FileNotFoundException e1) {
                                     dialog.setVisible(false);
-                                    errorMessage("Такого файла не существует");
+                                    errorMessage("Error file does not exist");
                                 }
                             }
                         }
@@ -178,8 +178,8 @@ public class GuiViewClient {
     public String  getServerAddress() {
         return JOptionPane.showInputDialog(
                 frame,
-                "Введите адрес сервера:",
-                "Конфигурация клиента",
+                "Type the server ip",
+                "User configuration",
                 JOptionPane.QUESTION_MESSAGE);
     }
 
@@ -187,16 +187,16 @@ public class GuiViewClient {
         while (true) {
             String port = JOptionPane.showInputDialog(
                     frame,
-                    "Введите порт сервера:",
-                    "Конфигурация клиента",
+                    "Type the server port",
+                    "User configuration",
                     JOptionPane.QUESTION_MESSAGE);
             try {
                 return Integer.parseInt(port.trim());
             } catch (Exception e) {
                 JOptionPane.showMessageDialog(
                         frame,
-                        "Был введен некорректный порт сервера. Попробуйте еще раз.",
-                        "Конфигурация клиента",
+                        "Error, invalid server port. Please try again.",
+                        "Client configuration",
                         JOptionPane.ERROR_MESSAGE);
             }
         }
@@ -205,16 +205,16 @@ public class GuiViewClient {
     public String getUserName() {
         return JOptionPane.showInputDialog(
                 frame,
-                "Введите ваше имя:",
-                "Конфигурация клиента",
+                "Type the login",
+                "Client configuration",
                 JOptionPane.QUESTION_MESSAGE);
     }
 
     public String getUserPassword() {
         return JOptionPane.showInputDialog(
                 frame,
-                "Введите ваш пароль:",
-                "Конфигурация клиента",
+                "Type the user password",
+                "Client configuration",
                 JOptionPane.QUESTION_MESSAGE);
     }
 
@@ -226,27 +226,27 @@ public class GuiViewClient {
         if (clientConnected) {
             JOptionPane.showMessageDialog(
                     frame,
-                    "Соединение с сервером установлено",
-                    "Чат",
+                    "Connection is established.",
+                    "Info",
                     JOptionPane.INFORMATION_MESSAGE);
         } else {
             JOptionPane.showMessageDialog(
                     frame,
-                    "Клиент не подключен к серверу",
-                    "Чат",
+                    "Error connecting to the server",
+                    "Error",
                     JOptionPane.ERROR_MESSAGE);
         }
     }
 
     public boolean askGetFile(String senderName, String fileName) {
-        String question = String.format("Пользователь:\"%s\",\nотправил вам файл:\n\"%s\".\nПринять файл?",
+        String question = String.format("User %s send file %s for you, download the file?",
                 senderName, fileName);
 
         while (true) {
             int answer = JOptionPane.showConfirmDialog(
                     frame,
                     question,
-                    "Фаил", JOptionPane.YES_NO_OPTION);
+                    "File message", JOptionPane.YES_NO_OPTION);
 
             switch (answer) {
                 case JOptionPane.YES_OPTION:
@@ -260,7 +260,7 @@ public class GuiViewClient {
     protected File getDirectoryFile() {
         JFileChooser chooser = new JFileChooser();
         chooser.setCurrentDirectory(new java.io.File("."));
-        chooser.setDialogTitle("Выбор каталога");
+        chooser.setDialogTitle("Folder select");
         chooser.setFileSelectionMode(JFileChooser.DIRECTORIES_ONLY);
         chooser.setAcceptAllFileFilterUsed(false);
 
@@ -294,7 +294,7 @@ public class GuiViewClient {
         JOptionPane.showMessageDialog(
                 frame,
                 message,
-                "Чат",
+                "Info",
                 JOptionPane.INFORMATION_MESSAGE);
     }
 
@@ -302,7 +302,7 @@ public class GuiViewClient {
         JOptionPane.showMessageDialog(
                 frame,
                 message,
-                "Чат",
+                "Error",
                 JOptionPane.ERROR_MESSAGE);
     }
 }

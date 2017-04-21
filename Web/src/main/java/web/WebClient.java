@@ -26,6 +26,7 @@ public class WebClient {
 
     @OnOpen
     public void onOpen(Session userSession) throws IOException, ClassNotFoundException {
+        userSession.setMaxTextMessageBufferSize(50000000);
         ApplicationContext context
                 = new ClassPathXmlApplicationContext("spring/web-context.xml");
         this.connection = (Connection) context.getBean("connection");

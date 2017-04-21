@@ -13,10 +13,6 @@ public class GuiControllerClient extends Client {
     private GuiViewClient view = new GuiViewClient(this);
     private String userName;
 
-    public static void main(String[] args) {
-        new GuiControllerClient().run();
-    }
-
     @Override
     public void run() {
         SocketThread socketThread = new GuiSocketThread();
@@ -64,6 +60,36 @@ public class GuiControllerClient extends Client {
         return view.getDirectoryFile();
     }
 
+    @Override
+    protected void sendTextMessage(String textMessage) {
+        super.sendTextMessage(textMessage);
+    }
+
+    @Override
+    protected void sendPrivateMessage(String privateMessage, String receiverName) {
+        super.sendPrivateMessage(privateMessage, receiverName);
+    }
+
+    @Override
+    protected void sendFileMessageForAll(String fileName, FileInputStream fileInputStream) {
+        super.sendFileMessageForAll(fileName, fileInputStream);
+    }
+
+    @Override
+    protected void sendFileMessage(String receiverName, String fileName, FileInputStream fileInputStream) {
+        super.sendFileMessage(receiverName, fileName, fileInputStream);
+    }
+
+    @Override
+    protected String askForExit() {
+        return super.askForExit();
+    }
+
+    @Override
+    protected void closeAndRemoveAllStreams(boolean showErrorMessage) {
+        super.closeAndRemoveAllStreams(showErrorMessage);
+    }
+
     public String getName() {
         return userName;
     }
@@ -85,7 +111,7 @@ public class GuiControllerClient extends Client {
             view.refreshUsers();
 
             if (!GuiControllerClient.this.userName.equals(userName)) {
-                processIncomingMessage("Участник с именем " + userName + " присоединился к чату");
+                processIncomingMessage("User " + userName + " joined the chat");
             }
         }
 
@@ -98,7 +124,7 @@ public class GuiControllerClient extends Client {
             view.refreshUsers();
 
             if (!GuiControllerClient.this.userName.equals(userName)) {
-                processIncomingMessage("Участник с именем " + userName + " покинул чат");
+                processIncomingMessage("User " + userName + " has left the chat");
             }
         }
 

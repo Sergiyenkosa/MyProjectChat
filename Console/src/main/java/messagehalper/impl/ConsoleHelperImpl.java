@@ -40,7 +40,7 @@ public class ConsoleHelperImpl implements ConsoleHelper {
                 return text;
             }
             catch (IOException e) {
-                writeErrorMessage("Произошла ошибка при попытке ввода текста. Попробуйте еще раз.");
+                writeErrorMessage("Text input error. Please try again.");
             }
         }
     }
@@ -49,11 +49,10 @@ public class ConsoleHelperImpl implements ConsoleHelper {
     public int readInt() {
         while (true) {
             try {
-                writeInfoMessage("Введите порт сервера");
                 return Integer.parseInt(readString());
             }
             catch (NumberFormatException e) {
-                writeErrorMessage("Произошла ошибка при попытке ввода числа. Попробуйте еще раз.");
+                writeErrorMessage("Number input error. Please try again.");
             }
         }
     }

@@ -59,7 +59,7 @@
             <form>
                 <input id="pm_input" type="text" placeholder="Private message" >
 
-                <input id="pm_send" type="button" class="chatmodal-submit bg-success" value="ok">
+                <input id="pm_send" type="button" class="chatmodal-submit bg-success" value="send message">
             </form>
         </div>
     </div>
@@ -86,7 +86,7 @@
             <h2>File message</h2><br>
             <form>
                 <input id="file_input" type="file"/>
-                <input id="file_choose" type="button" class="chatmodal-submit bg-success" value="choose file">
+                <input id="file_select" type="button" class="chatmodal-submit bg-success" value="select file">
 
                 <input id="fm_send" type="button" class="chatmodal-submit bg-success" value="send file">
 
@@ -104,7 +104,7 @@
             <h2>File message for all</h2><br>
             <form>
                 <input id="file_all_input" type="file"/>
-                <input id="file_all_choose" type="button" class="chatmodal-submit bg-success" value="choose file">
+                <input id="file_all_select" type="button" class="chatmodal-submit bg-success" value="select file">
 
                 <input id="fma_send" type="button" class="chatmodal-submit bg-success" value="send file">
             </form>

@@ -184,7 +184,7 @@ function connect () {
 
         $("#users").val(users);
 
-        addMessage("User " + userName + " left the chat");
+        addMessage("User " + userName + " has left the chat");
     }
 
     $("#private_message").click(function () {
@@ -246,7 +246,7 @@ function connect () {
         }
     });
 
-    $("#file_choose").click( function() {
+    $("#file_select").click( function() {
         $("#file_input").trigger( 'click' );
     } );
 
@@ -279,7 +279,7 @@ function connect () {
         $("#fma_modal").modal();
     });
 
-    $("#file_all_choose").click( function() {
+    $("#file_all_select").click( function() {
         $("#file_all_input").trigger( 'click' );
     } );
 
@@ -445,11 +445,11 @@ function connect () {
             const startByte = inputArray[1];
             let stopByte;
 
-            if (startByte + (1024 * 2) > file.size) {
+            if (startByte + (1024 * 6) > file.size) {
                 stopByte = file.size;
                 senderInputStreamId = 0;
             } else {
-                stopByte = startByte + (1024 * 2);
+                stopByte = startByte + (1024 * 6);
             }
 
             const promise = new Promise(getBuffer);
