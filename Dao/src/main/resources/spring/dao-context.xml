@@ -22,13 +22,13 @@
         <property name="sessionFactory" ref="sessionFactory"/>
     </bean>
 
-    <bean id="storage" class="store.impl.StorageHibernateImpl"/>
+    <bean id="storage" class="project.chat.entity.impl.StorageHibernateImpl"/>
 
-    <bean id="storageDao" class="daos.impl.StorageDaoImpl">
+    <bean id="storageDto" class="project.chat.dto.impl.StorageDtoImpl">
         <constructor-arg ref="storage"/>
     </bean>
 
     <context:annotation-config/>
-    <context:component-scan base-package="store"/>
+    <context:component-scan base-package="project.chat.entity"/>
     <tx:annotation-driven/>
 </beans>

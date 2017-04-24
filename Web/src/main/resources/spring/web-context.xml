@@ -8,7 +8,7 @@
         <constructor-arg index="1" type="int" value="${socket-port}"/>
     </bean>
 
-    <bean id="connection" class="connection.impl.ConnectionImpl" scope="prototype">
+    <bean id="connection" class="project.chat.connection.impl.ConnectionImpl" scope="prototype">
         <constructor-arg ref="socket"/>
     </bean>
 

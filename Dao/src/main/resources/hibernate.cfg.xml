@@ -18,6 +18,6 @@
         <property name="hibernate.c3p0.validate">true</property>
         <!--<property name="hibernate.hbm2ddl.auto">create</property>-->
 
-        <mapping resource="models/user.hbn.xml"/>
+        <mapping resource="project/chat/entity/user.hbn.xml"/>
     </session-factory>
 </hibernate-configuration>

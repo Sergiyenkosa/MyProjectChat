@@ -5,17 +5,17 @@
 
     <import resource="dao-context.xml"/>
 
-    <bean id="server" class="server.Server">
+    <bean id="server" class="project.chat.server.Server">
         <constructor-arg index="0" ref="serverSocket"/>
         <constructor-arg index="1" ref="messageValidator"/>
-        <constructor-arg index="2" ref="storageDao"/>
+        <constructor-arg index="2" ref="storageDto"/>
     </bean>
 
     <bean id="serverSocket" class="java.net.ServerSocket">
         <constructor-arg value="${server-port}"/>
     </bean>
 
-    <bean id="messageValidator" class="server.validators.impl.TextMessageValidatorImpl">
+    <bean id="messageValidator" class="project.chat.server.validators.impl.TextMessageValidatorImpl">
         <constructor-arg value="${max-text-length}"/>
     </bean>
 
