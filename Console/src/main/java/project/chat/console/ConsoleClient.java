@@ -1,9 +1,9 @@
 package project.chat.console;
 
 import project.chat.client.Client;
+import project.chat.client.SocketThread;
 import project.chat.messagehalper.ConsoleHelper;
 import project.chat.messagehalper.impl.ConsoleHelperImpl;
-import project.chat.messages.Message;
 
 import java.io.File;
 import java.io.FileInputStream;
@@ -13,16 +13,12 @@ import java.io.FileNotFoundException;
  * Created by s.sergienko on 06.03.2017.
  */
 public class ConsoleClient extends Client {
-    private ConsoleHelper consoleHelper = new ConsoleHelperImpl();
-    private final Object fileRequestLock = new Object();
-
-    public void setConsoleHelper(ConsoleHelper consoleHelper) {
-        this.consoleHelper = consoleHelper;
-    }
+    final ConsoleHelper consoleHelper = new ConsoleHelperImpl();
+    final Object fileRequestLock = new Object();
 
     @Override
     public void run() {
-        SocketThread socketThread = new ConsoleSocketThread();
+        SocketThread socketThread = new ConsoleSocketThread(this);
         socketThread.setDaemon(true);
         socketThread.start();
 
@@ -193,47 +189,18 @@ public class ConsoleClient extends Client {
         }
     }
 
-    protected class ConsoleSocketThread extends Client.SocketThread {
+    @Override
+    protected void closeAndRemoveAllReceiverStreamsFromInputStreamsMap(String receiverName, boolean showErrorMessage) {
+        super.closeAndRemoveAllReceiverStreamsFromInputStreamsMap(receiverName, showErrorMessage);
+    }
 
-        @Override
-        protected void processIncomingMessage(String message) {
-            consoleHelper.writeTextMessage(message);
-        }
+    @Override
+    protected void closeAndRemoveAllSenderStreamsFromOutputStreamsMap(String senderName, boolean showErrorMessage) {
+        super.closeAndRemoveAllSenderStreamsFromOutputStreamsMap(senderName, showErrorMessage);
+    }
 
-        @Override
-        protected void processIncomingFileMessageForAll(Message fileMessageForAll) {
-            synchronized (fileRequestLock) {
-                super.processIncomingFileMessageForAll(fileMessageForAll);
-            }
-        }
-
-        @Override
-        protected void processIncomingFileMessage(Message fileMessage) {
-            synchronized (fileRequestLock) {
-                super.processIncomingFileMessage(fileMessage);
-            }
-        }
-
-        @Override
-        protected void informAboutAddingNewUser(String userName) {
-            writeInfoMessage("User " + userName + " joined the chat");
-        }
-
-        @Override
-        protected void informAboutDeletingNewUser(String userName) {
-            closeAndRemoveAllReceiverStreamsFromInputStreamsMap(userName, true);
-            closeAndRemoveAllSenderStreamsFromOutputStreamsMap(userName, true);
-
-            writeInfoMessage("User " + userName + " has left the chat");
-        }
-
-        @Override
-        protected void notifyConnectionStatusChanged(boolean clientConnected) {
-            ConsoleClient.this.setClientConnected(clientConnected);
-
-            synchronized (ConsoleClient.this) {
-                ConsoleClient.this.notify();
-            }
-        }
+    @Override
+    protected void setClientConnected(boolean clientConnected) {
+        super.setClientConnected(clientConnected);
     }
 }

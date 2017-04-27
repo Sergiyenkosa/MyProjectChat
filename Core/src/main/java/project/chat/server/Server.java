@@ -7,6 +7,7 @@ import project.chat.dto.StorageDto;
 import project.chat.dto.UserDto;
 import project.chat.messages.Message;
 import project.chat.messages.MessageFactory;
+import project.chat.messages.MessageType;
 import project.chat.server.validators.TextMessageValidator;
 
 import java.io.IOException;
@@ -15,8 +16,7 @@ import java.net.Socket;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 
-import static project.chat.messages.Message.*;
-import static project.chat.messages.Message.MessageType.*;
+import static project.chat.messages.MessageType.*;
 
 /**
  * Created by s.sergienko on 11.10.2016.
@@ -112,9 +112,8 @@ public class Server {
     private void sendFileMessage(Connection connection, Message message) throws IOException {
         if (message.getSenderName().equals(message.getReceiverName())) {
 
-            message.setType(FILE_MESSAGE_RESPONSE);
+            message.setType(FILE_DOWNLOAD_ERROR);
             message.setSenderName(null);
-            message.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
 
             connection.send(message);
 
@@ -129,10 +128,8 @@ public class Server {
             try {
                 connectionMap.get(message.getReceiverName()).send(message);
             } catch (IOException | NullPointerException e) {
-                message.setType(FILE_MESSAGE_RESPONSE);
+                message.setType(FILE_DOWNLOAD_ERROR);
                 message.setSenderName(null);
-                message.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
-
                 connection.send(message);
 
                 String errorMessage = String.format("Error, file %s is not sent, user %s is unavailable.",
@@ -142,18 +139,24 @@ public class Server {
                 message.setData(errorMessage);
                 message.setReceiverName(null);
                 connection.send(message);
-
-                connection.send(message);
             }
         }
     }
 
-    private void sendFileMessageRequest(Message message) throws IOException {
+    private void sendFileMessageRequestAndUpload(Message message) throws IOException {
+        try {
+            connectionMap.get(message.getReceiverName()).send(message);
+        } catch (IOException | NullPointerException e) {
+            log.error(e);
+        }
+    }
+
+    private void sendFileMessageUploadError(Message message) {
         try {
             Connection receiverConnection = connectionMap.get(message.getReceiverName());
             receiverConnection.send(message);
 
-            if (message.getSenderInputStreamId() == FILE_TRANSFER_ERROR) {
+
                 String errorMessage = String.format("Error reading file %s, on user %s's side.",
                         message.getData(), message.getSenderName());
 
@@ -164,7 +167,6 @@ public class Server {
                 message.setBytes(null);
 
                 receiverConnection.send(message);
-            }
         } catch (IOException | NullPointerException e) {
             log.error(e);
         }
@@ -172,36 +174,47 @@ public class Server {
 
     private void sendFileMessageResponse(Message message) throws IOException {
         try {
-            int receiverFileId = message.getReceiverOutputStreamId();
+            connectionMap.get(message.getSenderName()).send(message);
+        } catch (IOException | NullPointerException e) {
+            log.error(e);
+        }
+    }
+
+    private void sendFileMessageDownload(Message message) {
+        try {
             Connection senderConnection = connectionMap.get(message.getSenderName());
 
-            if (receiverFileId == FILE_IS_DOWNLOADED) {
-                String infoMessage = String.format("User %s has received a file %s"
-                        , message.getReceiverName(), message.getData());
+            String infoMessage = String.format("User %s has received a file %s"
+                    , message.getReceiverName(), message.getData());
 
-                message.setType(INFO_MESSAGE);
-                message.setData(infoMessage);
-                message.setSenderName(null);
-                message.setReceiverName(null);
-                senderConnection.send(message);
-            } else if (receiverFileId == FILE_CANCEL || receiverFileId == FILE_TRANSFER_ERROR) {
-                senderConnection.send(message);
+            message.setType(INFO_MESSAGE);
+            message.setData(infoMessage);
+            message.setSenderName(null);
+            message.setReceiverName(null);
+            senderConnection.send(message);
+        } catch (IOException | NullPointerException e) {
+            log.error(e);
+        }
+    }
 
-                String cause = receiverFileId == Message.FILE_CANCEL ?
-                        "User %s refused to accept file %s" :
-                        "Error writing file %s, on user %s's side";
-                String errorMessage = String.format(cause,
-                        message.getReceiverName(), message.getData());
+    private void sendFileMessageCancelAndDownloadError(Message message) {
+        try {
+            Connection senderConnection = connectionMap.get(message.getSenderName());
 
-                message.setType(ERROR_MESSAGE);
-                message.setData(errorMessage);
-                message.setSenderName(null);
-                message.setReceiverName(null);
+            senderConnection.send(message);
 
-                senderConnection.send(message);
-            } else {
-                senderConnection.send(message);
-            }
+            String cause = message.getType() == FILE_CANCEL ?
+                    "User %s refused to accept file %s" :
+                    "Error writing file %s, on user %s's side";
+            String errorMessage = String.format(cause,
+                    message.getReceiverName(), message.getData());
+
+            message.setType(ERROR_MESSAGE);
+            message.setData(errorMessage);
+            message.setSenderName(null);
+            message.setReceiverName(null);
+
+            senderConnection.send(message);
         } catch (IOException | NullPointerException e) {
             log.error(e);
         }
@@ -279,7 +292,6 @@ public class Server {
                 if (type == TEXT_MESSAGE) {
                     if (isMessageTextCorrect(connection, message)) {
                         message.setData(userName + ": " + message.getData());
-
                         sendBroadcastMessage(message);
                     }
                 } else if (type == PRIVATE_MESSAGE) {
@@ -287,8 +299,8 @@ public class Server {
                         message.setSenderName(userName);
                         sendPrivateMessage(connection, message);
                     }
-                } else if (type == FILE_MESSAGE_REQUEST) {
-                    sendFileMessageRequest(message);
+                } else if (type == FILE_MESSAGE_REQUEST || type == FILE_IS_UPLOADED) {
+                    sendFileMessageRequestAndUpload(message);
                 } else if (type == FILE_MESSAGE_RESPONSE) {
                     sendFileMessageResponse(message);
                 } else if (type == FILE_MESSAGE) {
@@ -297,7 +309,13 @@ public class Server {
                 } else if (type == FILE_MESSAGE_FOR_ALL) {
                     message.setSenderName(userName);
                     sendFileMessageForAll(message);
-                } else {
+                } else if (type == FILE_UPLOAD_ERROR) {
+                    sendFileMessageUploadError(message);
+                } else if (type == FILE_IS_DOWNLOADED) {
+                    sendFileMessageDownload(message);
+                } else if (type == FILE_CANCEL || type == FILE_DOWNLOAD_ERROR) {
+                    sendFileMessageCancelAndDownloadError(message);
+                }else {
                     log.error("Message type error: " + type);
                     break;
                 }

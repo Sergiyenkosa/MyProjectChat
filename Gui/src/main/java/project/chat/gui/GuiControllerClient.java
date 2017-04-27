@@ -1,21 +1,23 @@
 package project.chat.gui;
 
 import project.chat.client.Client;
+import project.chat.client.SocketThread;
 
-import java.io.*;
+import java.io.File;
+import java.io.FileInputStream;
 
 
 /**
  * Created by s.sergienko on 19.10.2016.
  */
 public class GuiControllerClient extends Client {
-    private GuiModelClient model = new GuiModelClient();
-    private GuiViewClient view = new GuiViewClient(this);
-    private String userName;
+    GuiModelClient model = new GuiModelClient();
+    GuiViewClient view = new GuiViewClient(this);
+    String userName;
 
     @Override
     public void run() {
-        SocketThread socketThread = new GuiSocketThread();
+        SocketThread socketThread = new GuiSocketThread(this);
         socketThread.run();
     }
 
@@ -90,49 +92,26 @@ public class GuiControllerClient extends Client {
         super.closeAndRemoveAllStreams(showErrorMessage);
     }
 
+    @Override
+    protected void setClientConnected(boolean clientConnected) {
+        super.setClientConnected(clientConnected);
+    }
+
+    @Override
+    protected void closeAndRemoveAllReceiverStreamsFromInputStreamsMap(String receiverName, boolean showErrorMessage) {
+        super.closeAndRemoveAllReceiverStreamsFromInputStreamsMap(receiverName, showErrorMessage);
+    }
+
+    @Override
+    protected void closeAndRemoveAllSenderStreamsFromOutputStreamsMap(String senderName, boolean showErrorMessage) {
+        super.closeAndRemoveAllSenderStreamsFromOutputStreamsMap(senderName, showErrorMessage);
+    }
+
     public String getName() {
         return userName;
     }
 
     public GuiModelClient getModel() {
         return model;
-    }
-
-    public class GuiSocketThread extends Client.SocketThread {
-        @Override
-        protected void processIncomingMessage(String message) {
-            model.setNewMessage(message);
-            view.refreshMessages();
-        }
-
-        @Override
-        protected void informAboutAddingNewUser(String userName) {
-            model.addUser(userName);
-            view.refreshUsers();
-
-            if (!GuiControllerClient.this.userName.equals(userName)) {
-                processIncomingMessage("User " + userName + " joined the chat");
-            }
-        }
-
-        @Override
-        protected void informAboutDeletingNewUser(String userName) {
-            closeAndRemoveAllReceiverStreamsFromInputStreamsMap(userName, true);
-            closeAndRemoveAllSenderStreamsFromOutputStreamsMap(userName,  true);
-
-            model.deleteUser(userName);
-            view.refreshUsers();
-
-            if (!GuiControllerClient.this.userName.equals(userName)) {
-                processIncomingMessage("User " + userName + " has left the chat");
-            }
-        }
-
-        @Override
-        protected void notifyConnectionStatusChanged(boolean clientConnected) {
-            GuiControllerClient.this.setClientConnected(clientConnected);
-
-            view.notifyConnectionStatusChanged(clientConnected);
-        }
     }
 }

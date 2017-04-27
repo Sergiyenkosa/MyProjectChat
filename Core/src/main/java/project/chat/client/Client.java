@@ -2,20 +2,14 @@ package project.chat.client;
 
 import org.apache.log4j.Logger;
 import project.chat.connection.Connection;
-import project.chat.connection.impl.ConnectionImpl;
-import project.chat.messages.Message;
 import project.chat.messages.MessageFactory;
 
 import java.io.*;
 import java.lang.reflect.Field;
-import java.net.Socket;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.atomic.AtomicInteger;
-
-import static project.chat.messages.Message.*;
-import static project.chat.messages.Message.MessageType.*;
 
 /**
  * Created by s.sergienko on 18.10.2016.
@@ -23,17 +17,17 @@ import static project.chat.messages.Message.MessageType.*;
 public abstract class Client{
     private static final Logger log = Logger.getLogger(Client.class);
 
-    private Connection connection;
-
-    private volatile boolean clientConnected = false;
-
-    private Map<String, Map<Integer, FileInputStream>> inputStreamsMap = new ConcurrentHashMap<>();
-    private Map<String, Map<Integer, FileOutputStream>> outputStreamsMap = new ConcurrentHashMap<>();
-
-    private final Object closeAndRemoveFromInputStreamsMapLock = new Object();
-    private final Object closeAndRemoveFromOutputStreamMapLock = new Object();
-
     private AtomicInteger id = new AtomicInteger(1);
+
+    protected Connection connection;
+
+    protected volatile boolean clientConnected = false;
+
+    protected Map<String, Map<Integer, FileInputStream>> inputStreamsMap = new ConcurrentHashMap<>();
+    protected Map<String, Map<Integer, FileOutputStream>> outputStreamsMap = new ConcurrentHashMap<>();
+
+    protected final Object closeAndRemoveFromInputStreamsMapLock = new Object();
+    protected final Object closeAndRemoveFromOutputStreamMapLock = new Object();
 
     protected abstract void run();
 
@@ -250,258 +244,6 @@ public abstract class Client{
                     file.delete();
                 }
                 outputStreamsMap.remove(senderName);
-            }
-        }
-    }
-
-    protected abstract class SocketThread extends Thread {
-
-        protected abstract void processIncomingMessage(String message);
-
-        protected abstract void informAboutAddingNewUser(String userName);
-
-        protected abstract void informAboutDeletingNewUser(String userName);
-
-        protected abstract void notifyConnectionStatusChanged(boolean clientConnected);
-
-        protected void processInfoMessage(String infoMessage) {
-            writeInfoMessage(infoMessage);
-        }
-
-        protected void processErrorMessage(String errorMessage) {
-            writeErrorMessage(errorMessage);
-        }
-
-        protected void processIncomingFileMessageForAll(Message fileMessageForAll) {
-            if (askGetFile(fileMessageForAll.getSenderName(), fileMessageForAll.getData())) {
-                File file = getDirectoryFile();
-
-                try (BufferedOutputStream outputStream = new BufferedOutputStream(
-                        new FileOutputStream(file.getPath() + File.separator + fileMessageForAll.getData()))) {
-
-                    outputStream.write(fileMessageForAll.getBytes());
-                    outputStream.flush();
-
-                    writeInfoMessage("File saved");
-                } catch (IOException e) {
-                    writeErrorMessage("Error saving file");
-                }
-            }
-        }
-
-        protected void processIncomingFileMessage(Message fileMessage) {
-            if (askGetFile(fileMessage.getSenderName(), fileMessage.getData())) {
-                try {
-                    synchronized (closeAndRemoveFromOutputStreamMapLock) {
-                        FileOutputStream outputStream
-                                = new FileOutputStream(getDirectoryFile().getPath() +
-                                File.separator + fileMessage.getData());
-                        Integer id = getStreamId();
-                        String senderName = fileMessage.getSenderName();
-
-                        if (outputStreamsMap.containsKey(senderName)) {
-                            outputStreamsMap.get(senderName).put(id, outputStream);
-                        } else {
-                            Map<Integer, FileOutputStream> map = new HashMap<>();
-                            map.put(id, outputStream);
-                            outputStreamsMap.put(senderName, map);
-                        }
-
-                        writeInfoMessage("File obtaining process" + fileMessage.getData());
-
-                        fileMessage.setType(FILE_MESSAGE_RESPONSE);
-                        fileMessage.setReceiverOutputStreamId(id);
-                    }
-                } catch (FileNotFoundException e) {
-                    writeErrorMessage("Error saving file" + fileMessage.getData());
-
-                    fileMessage.setType(FILE_MESSAGE_RESPONSE);
-                    fileMessage.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
-                }
-            } else {
-                fileMessage.setType(FILE_MESSAGE_RESPONSE);
-                fileMessage.setReceiverOutputStreamId(FILE_CANCEL);
-            }
-
-            try {
-                connection.send(fileMessage);
-            } catch (IOException e) {
-                clientConnected = false;
-            }
-        }
-
-        protected void processIncomingFileMessageRequest(Message fileMessage) {
-            synchronized (closeAndRemoveFromOutputStreamMapLock) {
-                if (fileMessage.getSenderInputStreamId() == Message.FILE_TRANSFER_ERROR) {
-                    closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
-                            , fileMessage.getReceiverOutputStreamId(), false);
-                } else {
-                    if (outputStreamsMap.containsKey(fileMessage.getSenderName()) &&
-                            outputStreamsMap.get(fileMessage.getSenderName())
-                                    .containsKey(fileMessage.getReceiverOutputStreamId())) {
-                        try {
-                            BufferedOutputStream outputStream = new BufferedOutputStream(outputStreamsMap.
-                                    get(fileMessage.getSenderName())
-                                    .get(fileMessage.getReceiverOutputStreamId()));
-
-                            outputStream.write(fileMessage.getBytes());
-                            outputStream.flush();
-
-                            if (fileMessage.getSenderInputStreamId() == Message.FILE_IS_UPLOADED) {
-                                closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
-                                        , fileMessage.getReceiverOutputStreamId(), true);
-
-                                writeInfoMessage(String.format("File %s from user %s is uploaded"
-                                        , fileMessage.getData(), fileMessage.getSenderName()));
-
-                                fileMessage.setType(FILE_MESSAGE_RESPONSE);
-                                fileMessage.setReceiverOutputStreamId(FILE_IS_DOWNLOADED);
-                                fileMessage.setBytes(null);
-                            } else {
-
-                                fileMessage.setType(FILE_MESSAGE_RESPONSE);
-                                fileMessage.setBytes(null);
-                            }
-                        } catch (IOException e) {
-                            writeErrorMessage(String.format("Error writing file %s from user %s"
-                                    , fileMessage.getData(), fileMessage.getSenderName()));
-
-                            closeAndRemoveStreamFromOutputStreamMap(fileMessage.getSenderName()
-                                    , fileMessage.getReceiverOutputStreamId(), false);
-
-                            fileMessage.setType(FILE_MESSAGE_RESPONSE);
-                            fileMessage.setReceiverOutputStreamId(FILE_TRANSFER_ERROR);
-                            fileMessage.setBytes(null);
-                        }
-
-                        try {
-                            connection.send(fileMessage);
-                        } catch (IOException e) {
-                            clientConnected = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        protected void processIncomingFileMessageResponse(Message fileMessage) {
-            synchronized (closeAndRemoveFromInputStreamsMapLock) {
-                if (inputStreamsMap.containsKey(fileMessage.getReceiverName()) &&
-                        inputStreamsMap.get(fileMessage.getReceiverName())
-                                .containsKey(fileMessage.getSenderInputStreamId())) {
-                    if (fileMessage.getReceiverOutputStreamId() < 0) {
-                        closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
-                                , fileMessage.getSenderInputStreamId());
-                    } else {
-                        try {
-                            InputStream inputStream = inputStreamsMap.get(fileMessage.getReceiverName())
-                                    .get(fileMessage.getSenderInputStreamId());
-
-                            if (inputStream.available() > 1024 * 6) {
-                                byte[] bytes = new byte[1024 * 6];
-                                inputStream.read(bytes, 0, bytes.length);
-
-                                fileMessage.setType(FILE_MESSAGE_REQUEST);
-                                fileMessage.setBytes(bytes);
-                            } else {
-                                byte[] bytes = new byte[inputStream.available()];
-                                inputStream.read(bytes, 0, bytes.length);
-
-                                fileMessage.setType(FILE_MESSAGE_REQUEST);
-                                fileMessage.setSenderInputStreamId(FILE_IS_UPLOADED);
-                                fileMessage.setBytes(bytes);
-
-                                closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
-                                        , fileMessage.getSenderInputStreamId());
-                            }
-                        } catch (IOException e) {
-                            writeErrorMessage(String.format("Error reading file %s, for user %s"
-                                    , fileMessage.getData(), fileMessage.getReceiverName()));
-
-                            closeAndRemoveStreamFromInputStreamsMap(fileMessage.getReceiverName()
-                                    , fileMessage.getSenderInputStreamId());
-
-                            fileMessage.setType(FILE_MESSAGE_REQUEST);
-                            fileMessage.setSenderInputStreamId(FILE_TRANSFER_ERROR);
-                        }
-
-                        try {
-                            connection.send(fileMessage);
-                        } catch (IOException e) {
-                            clientConnected = false;
-                        }
-                    }
-                }
-            }
-        }
-
-        protected void clientHandshake() throws IOException, ClassNotFoundException {
-            while (!isInterrupted()) {
-                Message message = connection.receive();
-
-                if (message.getType() == MessageType.CREDENTIALS_REQUEST) {
-
-                    message.setType(USER_CREDENTIALS);
-                    message.setSenderName(getUserName());
-                    message.setData(getUserPassword());
-                    connection.send(message);
-                } else if (message.getType() == MessageType.USER_ACCEPTED) {
-                    notifyConnectionStatusChanged(true);
-                    break;
-                } else if (message.getType() == MessageType.ERROR_MESSAGE) {
-                    processErrorMessage(message.getData());
-                } else {
-                    throw new IOException("Unexpected MessageType");
-                }
-            }
-        }
-
-        protected void clientMainLoop() throws IOException, ClassNotFoundException {
-            while (clientConnected) {
-                Message message = connection.receive();
-                MessageType messageType = message.getType();
-
-                if (messageType == MessageType.FILE_MESSAGE_REQUEST) {
-                    processIncomingFileMessageRequest(message);
-                } else if (messageType == MessageType.FILE_MESSAGE_RESPONSE) {
-                    processIncomingFileMessageResponse(message);
-                } else if (messageType == MessageType.TEXT_MESSAGE) {
-                    processIncomingMessage(message.getData());
-                } else if (messageType == MessageType.INFO_MESSAGE) {
-                    processInfoMessage(message.getData());
-                }else if (messageType == MessageType.ERROR_MESSAGE) {
-                    processErrorMessage(message.getData());
-                } else if (messageType == MessageType.USER_ADDED) {
-                    informAboutAddingNewUser(message.getData());
-                } else if (messageType == MessageType.USER_REMOVED) {
-                    informAboutDeletingNewUser(message.getData());
-                } else if (messageType == MessageType.FILE_MESSAGE) {
-                    processIncomingFileMessage(message);
-                } else if (messageType == MessageType.FILE_MESSAGE_FOR_ALL) {
-                    processIncomingFileMessageForAll(message);
-                } else {
-                    clientConnected = false;
-                    throw new RuntimeException("Unexpected MessageType: " + message.getType());
-                }
-            }
-        }
-
-        @Override
-        public void run() {
-            String address = getServerAddress();
-            int port = getServerPort();
-
-            try {
-                Socket socket = new Socket(address, port);
-
-                connection = new ConnectionImpl(socket);
-
-                clientHandshake();
-
-                clientMainLoop();
-            } catch (IOException | ClassNotFoundException e) {
-                closeAndRemoveAllStreams(true);
-                notifyConnectionStatusChanged(false);
             }
         }
     }

@@ -4,15 +4,25 @@ package project.chat.entity;
  * Created by Sergiy on 09.03.2017.
  */
 public class User {
+    private int id;
     private String login;
     private String password;
 
     public User() {
     }
 
-    public User(String login, String password) {
+    public User(int id, String login, String password) {
+        this.id = id;
         this.login = login;
         this.password = password;
+    }
+
+    public int getId() {
+        return id;
+    }
+
+    public void setId(int id) {
+        this.id = id;
     }
 
     public String getLogin() {
@@ -38,14 +48,11 @@ public class User {
 
         User user = (User) o;
 
-        if (!login.equals(user.login)) return false;
-        return password != null ? password.equals(user.password) : user.password == null;
+        return login.equals(user.login);
     }
 
     @Override
     public int hashCode() {
-        int result = login.hashCode();
-        result = 31 * result + (password != null ? password.hashCode() : 0);
-        return result;
+        return login.hashCode();
     }
 }

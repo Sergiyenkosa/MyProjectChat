@@ -1,4 +1,6 @@
-package project.chat.console;
+package project.chat;
+
+import project.chat.console.ConsoleClient;
 
 /**
  * Created by s.sergienko on 20.04.2017.

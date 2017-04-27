@@ -1,6 +1,6 @@
 package project.chat.messages;
 
-import static project.chat.messages.Message.MessageType.*;
+import static project.chat.messages.MessageType.*;
 
 /**
  * Created by s.sergienko on 01.03.2017.

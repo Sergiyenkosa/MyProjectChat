@@ -5,6 +5,7 @@ import org.apache.log4j.Logger;
 import project.chat.configuration.ChatServerWebClientConfigurator;
 import project.chat.connection.Connection;
 import project.chat.messages.Message;
+import project.chat.messages.MessageType;
 
 import javax.websocket.OnClose;
 import javax.websocket.OnMessage;
@@ -59,7 +60,7 @@ public class WebClient {
             connection.send(message);
         } catch (IOException e) {
             Message message = new Message();
-            message.setType(Message.MessageType.ERROR_MESSAGE);
+            message.setType(MessageType.ERROR_MESSAGE);
             message.setData("Server is temporarily unavailable");
 
             try {

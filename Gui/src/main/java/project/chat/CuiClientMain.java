@@ -1,4 +1,6 @@
-package project.chat.gui;
+package project.chat;
+
+import project.chat.gui.GuiControllerClient;
 
 /**
  * Created by s.sergienko on 21.04.2017.

@@ -30,12 +30,17 @@ function connect () {
         const jsonObj = JSON.parse(event.data);
         const type = jsonObj.type;
 
-        if (type === "CREDENTIALS_REQUEST") {
-            login.removeClass("hidden");
-        } else if (type === "USER_ACCEPTED") {
-            loginModal.modal("hide");
+        if (type === "FILE_MESSAGE_REQUEST") {
+            processFileMessageRequest(jsonObj);
+        } else if (type === "FILE_MESSAGE_RESPONSE") {
+            processFileMessageResponse(jsonObj);
         } else if (type === "TEXT_MESSAGE") {
             addMessage(jsonObj.data);
+        } else if (type === "USER_ADDED") {
+            addUser(jsonObj.data);
+        } else if (type === "USER_REMOVED") {
+            removeUser(jsonObj.data);
+            deleteUserFromOutputAndInputFilesMap(jsonObj.data)
         } else if (type === "ERROR_MESSAGE") {
             if (loginModal.hasClass("in")) {
                 displayUserCredentialsError(jsonObj.data);
@@ -44,20 +49,22 @@ function connect () {
             }
         } else if (type === "INFO_MESSAGE") {
             displayInfo(jsonObj.data);
-        } else if (type === "USER_ADDED") {
-            addUser(jsonObj.data);
-
-        } else if (type === "USER_REMOVED") {
-            removeUser(jsonObj.data);
-            deleteUserFromOutputAndInputFilesMap(jsonObj.data)
-        } else if (type === "FILE_MESSAGE_FOR_ALL") {
-            askFileAllMessage(jsonObj);
         } else if (type === "FILE_MESSAGE") {
             askFileMessage(jsonObj);
-        } else if (type === "FILE_MESSAGE_REQUEST") {
-            processFileMessageRequest(jsonObj);
-        } else if (type === "FILE_MESSAGE_RESPONSE") {
-            processFileMessageResponse(jsonObj);
+        } else if (type === "FILE_MESSAGE_FOR_ALL") {
+            askFileAllMessage(jsonObj);
+        } else if (type === "FILE_IS_UPLOADED") {
+            processFileMessageUpload(jsonObj);
+        } else if (type === "FILE_CANCEL") {
+            processFileMessageCancelAndDownloadError(jsonObj)
+        } else if (type === "FILE_UPLOAD_ERROR") {
+            processFileMessageUploadError(jsonObj)
+        } else if (type === "FILE_DOWNLOAD_ERROR") {
+            processFileMessageCancelAndDownloadError(jsonObj)
+        }else if (type === "CREDENTIALS_REQUEST") {
+            login.removeClass("hidden");
+        } else if (type === "USER_ACCEPTED") {
+            loginModal.modal("hide");
         }
     };
 
@@ -407,8 +414,8 @@ function connect () {
             modal.modal('hide');
             modal.remove();
 
-            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName,
-                null, message.senderInputStreamId, -2);
+            sendMessage("FILE_CANCEL", message.data, message.senderName, message.receiverName,
+                null, message.senderInputStreamId);
         });
 
         modal.modal();
@@ -417,72 +424,83 @@ function connect () {
     function processFileMessageRequest(message) {
         const writer = outputFilesMap.get(message.senderName).get(message.receiverOutputStreamId);
 
-        const senderInputStreamId = message.senderInputStreamId;
-
-        if (senderInputStreamId > 0) {
-            writer.write(new Uint8Array(message.bytes));
-            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName, null,
+        writer.write(new Uint8Array(message.bytes));
+        sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName, null,
             message.senderInputStreamId, message.receiverOutputStreamId);
-        } else if (senderInputStreamId === 0) {
-            writer.write(new Uint8Array(message.bytes));
-            writer.close();
-            sendMessage("FILE_MESSAGE_RESPONSE", message.data, message.senderName, message.receiverName, null,
-                message.senderInputStreamId, 0);
+    }
 
-            outputFilesMap.get(message.senderName).delete(message.receiverOutputStreamId);
-        } else if (senderInputStreamId === -1) {
-            writer.abort();
-            outputFilesMap.get(message.senderName).delete(message.receiverOutputStreamId);
-        }
+    function processFileMessageUpload(message) {
+        const writer = outputFilesMap.get(message.senderName).get(message.receiverOutputStreamId);
+
+        writer.write(new Uint8Array(message.bytes));
+        writer.close();
+        sendMessage("FILE_IS_DOWNLOADED", message.data, message.senderName, message.receiverName, null,
+            message.senderInputStreamId);
+
+        outputFilesMap.get(message.senderName).delete(message.receiverOutputStreamId);
+    }
+    
+    function processFileMessageUploadError(message) {
+        const writer = outputFilesMap.get(message.senderName).get(message.receiverOutputStreamId);
+        writer.abort();
+        outputFilesMap.get(message.senderName).delete(message.receiverOutputStreamId);
     }
 
     function processFileMessageResponse(message) {
-        if (message.receiverOutputStreamId > 0) {
-            let senderInputStreamId = message.senderInputStreamId;
+        let isFileEnd;
 
-            const inputArray = inputFilesMap.get(message.receiverName).get(senderInputStreamId);
-            const file = inputArray[0];
-            const startByte = inputArray[1];
-            let stopByte;
+        const inputArray = inputFilesMap.get(message.receiverName).get(message.senderInputStreamId);
+        const file = inputArray[0];
+        const startByte = inputArray[1];
+        let stopByte;
 
-            if (startByte + (1024 * 6) > file.size) {
-                stopByte = file.size;
-                senderInputStreamId = 0;
-            } else {
-                stopByte = startByte + (1024 * 6);
-            }
+        if (startByte + (1024 * 6) > file.size) {
+            stopByte = file.size;
+            isFileEnd = true;
+        } else {
+            stopByte = startByte + (1024 * 6);
+            isFileEnd = false;
+        }
 
-            const promise = new Promise(getBuffer);
+        const promise = new Promise(getBuffer);
 
-            promise.then(function(data) {
-                sendMessage("FILE_MESSAGE_REQUEST", message.data, message.senderName, message.receiverName, Array.from(data),
-                    senderInputStreamId, message.receiverOutputStreamId);
-
-                inputArray[1] = stopByte;
-            }).catch(function(err) {
-                console.log('Error: ',err);
-                displayError("File reading error");
-
-                sendMessage("FILE_MESSAGE_REQUEST", message.data, message.senderName, message.receiverName, null,
-                    -1, message.receiverOutputStreamId);
+        promise.then(function(data) {
+            if (isFileEnd) {
+                sendMessage("FILE_IS_UPLOADED", message.data, message.senderName, message.receiverName, Array.from(data),
+                    0, message.receiverOutputStreamId);
 
                 inputFilesMap.get(message.receiverName).delete(message.senderInputStreamId);
-                displayError("Error reading file: " + file.name + ", for user: " + message.receiverName)
-            });
+            } else {
+                sendMessage("FILE_MESSAGE_REQUEST", message.data, message.senderName, message.receiverName, Array.from(data),
+                    message.senderInputStreamId, message.receiverOutputStreamId);
 
-            function getBuffer(resolve) {
-                const reader = new FileReader();
-                const blob = file.slice(startByte, stopByte);
-                reader.readAsArrayBuffer(blob);
-                reader.onload = function() {
-                    const arrayBuffer = reader.result;
-                    const bytes = new Uint8Array(arrayBuffer);
-                    resolve(bytes);
-                }
+                inputArray[1] = stopByte;
             }
-        } else {
+        }).catch(function(err) {
+            console.log('Error: ',err);
+
+            sendMessage("FILE_UPLOAD_ERROR", message.data, message.senderName, message.receiverName, null,
+                0, message.receiverOutputStreamId);
+
             inputFilesMap.get(message.receiverName).delete(message.senderInputStreamId);
+            displayError("Error reading file: " + file.name + ", for user: " + message.receiverName)
+        });
+
+        function getBuffer(resolve) {
+            const reader = new FileReader();
+            const blob = file.slice(startByte, stopByte);
+            reader.readAsArrayBuffer(blob);
+            reader.onload = function() {
+                const arrayBuffer = reader.result;
+                const bytes = new Uint8Array(arrayBuffer);
+                resolve(bytes);
+            }
         }
+    }
+    
+    function processFileMessageCancelAndDownloadError(message) {
+        inputFilesMap.get(message.receiverName).delete(message.senderInputStreamId);
+        console.log()
     }
 
     function deleteUserFromOutputAndInputFilesMap(userName) {
